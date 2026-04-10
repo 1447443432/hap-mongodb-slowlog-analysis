@@ -2,6 +2,87 @@
 
 This repository packages the local `hap-mongodb-slowlog-analysis` skill as a standard Codex plugin-style project so it can be versioned, shared, and reinstalled reliably.
 
+## 中文安装文档
+
+### 一、仓库位置
+
+当前本地仓库默认位于：
+
+`D:\projects\python\hap-mongodb-slowlog-analysis-plugin`
+
+### 二、安装到 Codex
+
+在仓库根目录执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-local.ps1
+```
+
+这个脚本会把 skill 安装到：
+
+```text
+%USERPROFILE%\.codex\skills\hap-mongodb-slowlog-analysis
+```
+
+在你当前机器上，通常对应：
+
+`C:\Users\admin\.codex\skills\hap-mongodb-slowlog-analysis`
+
+### 三、安装后如何使用
+
+安装完成后，不需要依赖“个人技能”面板，也可以直接在 Codex 对话里调用：
+
+```text
+用 hap-mongodb-slowlog-analysis 分析这段慢日志 ...
+```
+
+或者：
+
+```text
+Use $hap-mongodb-slowlog-analysis to analyze this MongoDB slow log.
+```
+
+### 四、修改 skill 后如何同步
+
+如果你修改了下面这些文件：
+
+- `skills/hap-mongodb-slowlog-analysis/SKILL.md`
+- `skills/hap-mongodb-slowlog-analysis/agents/openai.yaml`
+- `skills/hap-mongodb-slowlog-analysis/references/mongodb-4.4-slowlog-guidelines.md`
+
+请执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\sync-local.ps1
+```
+
+这个命令会把仓库里的最新版本重新同步到本机 Codex skill 目录。
+
+### 五、尝试同步到当前 Codex 插件目录
+
+如果你希望额外尝试把它同步到当前 Codex 使用中的本地插件 catalog，可执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\sync-local.ps1 -IncludePluginCatalog
+```
+
+注意：
+
+- 这是 best-effort 行为
+- 它不能保证 skill 一定显示在“个人技能”里
+- 当前证据表明，Codex 的 UI 列表还有额外过滤逻辑
+
+### 六、为什么已经安装了，个人技能里还是没有
+
+当前排查结论是：
+
+- 安装到 `%USERPROFILE%\.codex\skills` 只能保证“本地可用”
+- 不能保证“个人技能 UI 可见”
+- “个人技能”面板大概率不是直接扫描 skill 目录
+- 它更像是基于官方插件 catalog、插件元数据、UI 资源或产品侧规则来展示
+
+因此请把这个仓库视为“稳定安装源”，而不是把“个人技能面板是否显示”作为唯一成功标准。
+
 ## Structure
 
 - `.codex-plugin/plugin.json`: plugin manifest

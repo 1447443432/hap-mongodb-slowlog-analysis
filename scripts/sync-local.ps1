@@ -8,6 +8,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $pluginName = "hap-mongodb-slowlog-analysis"
 $skillSource = Join-Path $repoRoot "skills\hap-mongodb-slowlog-analysis"
 $pluginManifestSource = Join-Path $repoRoot ".codex-plugin\plugin.json"
+$pluginAgentsSource = Join-Path $repoRoot "agents"
+$pluginAssetsSource = Join-Path $repoRoot "assets"
 $codexHome = Join-Path $env:USERPROFILE ".codex"
 $skillsRoot = Join-Path $codexHome "skills"
 $skillTarget = Join-Path $skillsRoot $pluginName
@@ -24,6 +26,8 @@ if ($IncludePluginCatalog) {
     $catalogPluginRoot = Join-Path $catalogRoot "plugins\$pluginName"
     $catalogSkillTarget = Join-Path $catalogPluginRoot "skills\hap-mongodb-slowlog-analysis"
     $catalogManifestTarget = Join-Path $catalogPluginRoot ".codex-plugin\plugin.json"
+    $catalogAgentsTarget = Join-Path $catalogPluginRoot "agents"
+    $catalogAssetsTarget = Join-Path $catalogPluginRoot "assets"
     $catalogMarketPath = Join-Path $catalogRoot ".agents\plugins\marketplace.json"
 
     if (Test-Path -LiteralPath $catalogRoot) {
@@ -33,6 +37,18 @@ if ($IncludePluginCatalog) {
         }
         Copy-Item -LiteralPath $skillSource -Destination $catalogSkillTarget -Recurse -Force
         Copy-Item -LiteralPath $pluginManifestSource -Destination $catalogManifestTarget -Force
+        if (Test-Path -LiteralPath $pluginAgentsSource) {
+            if (Test-Path -LiteralPath $catalogAgentsTarget) {
+                Remove-Item -LiteralPath $catalogAgentsTarget -Recurse -Force
+            }
+            Copy-Item -LiteralPath $pluginAgentsSource -Destination $catalogAgentsTarget -Recurse -Force
+        }
+        if (Test-Path -LiteralPath $pluginAssetsSource) {
+            if (Test-Path -LiteralPath $catalogAssetsTarget) {
+                Remove-Item -LiteralPath $catalogAssetsTarget -Recurse -Force
+            }
+            Copy-Item -LiteralPath $pluginAssetsSource -Destination $catalogAssetsTarget -Recurse -Force
+        }
         Write-Host "Best-effort synced plugin files into: $catalogPluginRoot"
 
         if (Test-Path -LiteralPath $catalogMarketPath) {
