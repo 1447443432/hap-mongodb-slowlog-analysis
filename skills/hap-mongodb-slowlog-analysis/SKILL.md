@@ -164,6 +164,48 @@ description: Analyze MongoDB 4.4.x slow logs from pasted slow-log text, uploaded
 - 索引创建命令应使用代码块
 - 如果支持交互增强，代码块右上角应有复制按钮
 
+### HTML 目录交互规范（必须遵守）
+
+生成 HTML 时，目录（TOC）必须满足以下所有要求，否则视为不合格输出：
+
+1. **锚点完整性**：每个 TOC 链接的 `href`（如 `#g2`）必须在正文中存在对应的 `id` 属性。
+   - 生成 HTML 后必须自检：遍历所有 TOC 链接，确认每个 `href` 去掉 `#` 后都能在 DOM 中找到对应元素。
+   - 如果 TOC 链接指向分组（如 G1-G18），必须给每个分组的容器元素（如 `<div class="group-section" id="g2">`）加上对应 `id`。
+   - 不允许只给第一个分组加 `id` 而遗漏其余分组。
+
+2. **平滑滚动**：CSS 必须包含：
+   ```css
+   html {
+     scroll-behavior: smooth;
+     scroll-padding-top: 20px;
+   }
+   ```
+
+3. **TOC 滚动高亮兼容性**：
+   - 侧边栏通常是 `position: sticky` 布局。
+   - 判断当前可见章节时，必须使用 `getBoundingClientRect().top` 而非 `element.offsetTop`，因为 `offsetTop` 在 sticky 容器下会返回错误值。
+   - 正确写法示例：
+     ```javascript
+     sections.forEach(s => {
+       if (s.getBoundingClientRect().top <= 120) {
+         current = s.id;
+       }
+     });
+     ```
+
+4. **目标元素间距**：被跳转到的目标元素应设置 `scroll-margin-top`，确保不会被页面顶部遮挡：
+   ```css
+   h2[id], h3[id], .group-section[id] {
+     scroll-margin-top: 20px;
+   }
+   ```
+
+5. **自检清单**：生成 HTML 后，在最终写入文件前，用以下清单自检：
+   - [ ] 每个 TOC `<a href="#xxx">` 是否都有对应的 `id="xxx"` 元素
+   - [ ] 是否包含 `scroll-behavior: smooth`
+   - [ ] 是否包含 `scroll-padding-top` 或 `scroll-margin-top`
+   - [ ] TOC 高亮是否使用 `getBoundingClientRect` 而非 `offsetTop`
+
 如果 HTML 已写入文件，任务完成时可以提供一个最小化交付提示，但不要默认增加单独的“交付结果 / Deliverables”小节。\r\n\r\n默认只需要：\r\n\r\n- 在最终回复里给出最重要产物的可点击文件路径\r\n- 如有必要，再补一个可点击目录路径\r\n- 如果是 HTML，可选补一个本地打开示例\r\n\r\n如果用户没有要求展示目录或打开方式，不要额外展开太多交付说明。\r\n\r\n在 Codex 桌面环境里，优先使用简洁的可点击路径。
 
 
