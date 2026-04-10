@@ -1,0 +1,33 @@
+{
+  "name": "hap-mongodb-slowlog-analysis",
+  "version": "1.0.0",
+  "description": "Analyze MongoDB 4.4 slow logs and provide practical optimization guidance.",
+  "author": {
+    "name": "Local Codex User"
+  },
+  "license": "UNLICENSED",
+  "keywords": [
+    "mongodb",
+    "slowlog",
+    "analysis",
+    "hap"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "HAP MongoDB Slowlog Analysis",
+    "shortDescription": "Analyze MongoDB slow logs and suggest practical fixes",
+    "longDescription": "Analyze pasted or uploaded MongoDB slow logs, group repeated query shapes, explain why they are slow, and provide practical query and index optimization advice.",
+    "developerName": "Local",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Knowledge"
+    ],
+    "defaultPrompt": [
+      "Analyze this MongoDB slow log and explain why it is slow.",
+      "Group repeated slow queries and suggest indexes.",
+      "Generate practical optimization advice for this MongoDB log."
+    ],
+    "brandColor": "#0F766E"
+  }
+}
