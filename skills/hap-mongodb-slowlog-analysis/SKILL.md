@@ -1,408 +1,561 @@
 ﻿---
 name: hap-mongodb-slowlog-analysis
-description: Analyze MongoDB 4.4.x slow logs from pasted slow-log text, uploaded log files, or mongodb.log content and produce practical query optimization advice, index recommendations, evidence-backed reasoning, and ready-to-run Mongo shell index commands. The skill is AI-first and should analyze logs directly in conversation without relying on local PowerShell by default. It should also be able to group repeated entries by namespace, deduplicate repeated query shapes, and summarize repeated patterns before giving advice. Only treat DOCX or PDF export as optional conversion steps that may require local tooling. Prefer Chinese output by default, but support English when requested. Treat ctime as already indexed and never recommend a new index on it. Treat status as a low-cardinality field with only 1 and 9, where 1 means active/in-use, and do not include status in recommended index definitions.
+description: Analyze MongoDB 4.4.x slow logs from pasted slow-log text, uploaded log files, or mongodb.log content and produce practical query optimization advice, index recommendations, evidence-backed reasoning, and ready-to-run Mongo shell index commands. The skill is AI-first and should analyze logs directly in conversation without relying on local scripts or PowerShell. It should group repeated entries by namespace (ns), deduplicate repeated query shapes, and summarize repeated patterns before giving advice. Prefer Chinese output by default, but support English when requested. Treat ctime as already indexed and never recommend a new index on it. Treat status as a low-cardinality field with only 1 and 9, where 1 means active/in-use, and do not include status in recommended index definitions. IMPORTANT: Never use local scripts or PowerShell commands. Always analyze directly with AI. Only use fields that actually exist in the logs.
 ---
 
 # MongoDB Slowlog Analysis
 
-## Overview
+## 核心原则（必须遵守）
 
-默认优先由 AI 直接在对话中分析慢日志，不依赖本地 PowerShell。这个 skill 的主体能力是：
+### 🚫 禁止使用本地脚本
 
-- 直接读取用户粘贴的慢日志文本
-- 直接读取用户上传的 `mongodb.log`、`.log`、`.txt`、`.jsonl` 等文件内容
-- 直接在对话中给出分析结论
-- 对批量慢日志按集合（`ns`）归类，并按“查询形态”去重汇总
-- 直接生成 Markdown 或 HTML 内容
-- 只在必要时把 DOCX / PDF 视为可选转换结果，而不是默认能力
+**本 skill 绝对不允许使用本地脚本（包括 PowerShell、Python 脚本等）作为分析入口。**
 
-也就是说，这个 skill 的核心不是“运行脚本”，而是“AI 直接分析并输出结构化结果”。
+- ❌ 禁止运行 `extract-slowlog-signals.ps1`
+- ❌ 禁止运行 `generate-slowlog-report.ps1`
+- ❌ 禁止使用 `execute_command` 解析日志
+- ❌ 禁止使用 Python/Shell 脚本做统计分析
 
-## Default Mode
+- ✅ 直接用 AI 读取和解析日志内容
+- ✅ 直接用 AI 生成分析结论
+- ✅ 直接用 AI 生成 Markdown/HTML 报告
+- ✅ 仅在用户明确要求落地文件时，才由 AI 生成内容后写入文件
 
-默认模式是“纯 AI 分析优先”：
+### ✅ 分类去重规则
 
-1. 用户直接粘贴一段慢日志
-2. 用户上传一个日志文件
-3. 直接在对话中分析，不要求用户先保存文件
-4. 直接输出结构化结论
-5. 如有必要，再补充可执行的 Mongo Shell `createIndex(...)` 命令
-6. 如果用户要求 `md` 或 `html`，优先由 AI 直接生成对应内容
+**批量日志分析时，必须按以下规则处理：**
 
-在这个模式下：
+1. **按库表（ns）分组**
+   - 格式：`{数据库名}.{集合名}`
+   - 例如：`mdwsrows.ws64c7525be67c752002c28e76`
+   - 同一集合的所有慢查询必须归入同一分组
 
-- 不要求先运行本地脚本
-- 不要求先解析成中间文件
-- 不要求先落地 PowerShell 产物
-- 用户上传文件时，也应优先直接读取文件内容并在对话中分析
-- 批量日志应优先做“按表归类 + 按查询形态去重”的 AI 汇总
-- 应优先把注意力放在执行计划、过滤条件、排序方式、扫描量和查询形态上
+2. **按查询形态去重**
+   - 忽略具体常量值，提取字段结构和操作符结构
+   - 同一分组的查询，如果 filter 字段结构相同，则视为同一查询形态
+   - 每组统计：出现次数、最慢耗时、平均耗时
 
-## Output Strategy
+3. **排序规则**
+   - **排序维度选项**：
+     - `max_duration`：最慢耗时降序（**默认值**）
+     - `count`：出现次数降序
+     - `avg_duration`：平均耗时降序
+   - 用户未指定时，默认按 **最慢耗时降序** 排列
+   - 输出的分组顺序 = 慢查询严重程度顺序
+   - **库表标题使用 h3 标签**（比文档标题 h2 低一级）
 
-按优先级使用下面这套策略：
+### ✅ 字段真实性规则
 
-1. `对话分析`
-   - 默认方式
-   - 直接输出分析结果
-2. `Markdown`
-   - 优先由 AI 直接生成
-   - 不依赖 PowerShell 也可以完成
-3. `HTML`
-   - 优先由 AI 直接生成 HTML 内容
-   - 如需落文件，可以把 AI 生成的 HTML 保存到工作区
-4. `DOCX / PDF`
-   - 不作为 skill 的默认能力承诺
-   - 如果用户明确需要真正的文件格式，可以说明这一步通常需要本地转换工具
-   - 这属于可选增强，而不是主路径
+**只使用日志中实际存在的字段，绝对不虚构字段。**
 
-## When to Use Tools
+- 索引建议中的字段必须出现在日志的 filter、sort、pipeline 中
+- 不要建议使用"假设的"、"可能的"、"常见的"字段
+- 如果某字段在日志中没有出现，不允许出现在索引建议中
+- projection 中的字段可以用于分析，但不纳入索引建议
 
-默认不要把脚本当作分析入口。
+**排除字段（明确禁止用于索引建议）：**
+- `ctime` - 已存在索引
+- `status` - 低基数字段
 
-只有在下面场景下，才可以考虑使用本地工具或脚本：
+### ✅ 输出文件命名规则
 
-- 用户明确要求把结果落成文件
-- 用户明确要求批量处理整个 `mongodb.log`
-- 用户明确要求把 Markdown / HTML 自动写入某个文件
-- 用户明确要求尝试导出 DOCX / PDF
+**HTML 报告文件命名必须严格遵循以下格式：**
 
-如果只是单条、少量、临时分析，或者上传文件后只需要直接分析，优先用 AI 完成。
+```
+{日志文件名全称}-slowlog-report-{YYYYMMDDHHmmss}.html
+```
+
+示例：
+- 源文件：`mongodb.log` → `mongodb.log-slowlog-report-20260410143000.html`
+- 源文件：`slowquery-2026-03-30.log` → `slowquery-2026-03-30.log-slowlog-report-20260410143000.html`
+
+**规则说明：**
+- 精度到秒（YYYYMMDDHHmmss）
+- 使用下划线连接日志名和报告标识
+- 文件保存在与日志相同的目录，或用户指定的工作目录
 
 ## Workflow
 
-1. 接受三类输入：
-   - 用户直接粘贴的慢日志文本
-   - 用户上传的日志文件内容
-   - 一个 `mongodb.log` 文件路径或一段日志文件内容
-2. 如果输入里包含多条慢日志，应先做批量归类：
-   - 先按 `ns` 归类
-   - 再按“查询形态”去重
-   - 每组保留代表性样本，并统计重复次数
-3. “查询形态”去重时，优先忽略具体常量值，重点看这些结构是否相同：
-   - `operation` (`find` / `aggregate`)
-   - `ns`
-   - `filter` 的字段结构和操作符结构
-   - `sort`
-   - `projection`
-   - `limit`
-   - `pipeline` 的阶段结构
-   - `planSummary`
-4. 先尽量识别这些关键信号：
-   - `ns`
-   - `planSummary`
-   - `keysExamined`
-   - `docsExamined`
-   - `nreturned`
-   - `durationMillis`
-   - `find` / `aggregate`
-   - `filter`
-   - `sort`
-   - `projection`
-   - `limit`
-   - `$group`
-   - `$or`
-   - `$regex`
-   - `$ne/$nin/$not/$size`
-5. 重点判断这些性能模式：
-   - 全表扫描 `COLLSCAN`
-   - 当前索引主要在服务排序，而不是先过滤
-   - `limit: 1` 但扫描很多文档
-   - `$or` 不同分支需要不同索引
-   - `$ne`、`$nin`、`$not`、`$size` 这类负向条件拖慢查询
-   - 正则、包含搜索这类普通索引收益很差的查询
-   - aggregate 首段 `$match` 不够收敛
-   - `$group` 放大上游扫描成本
-6. 给出结构化建议，并明确说明应当：
-   - 先改查询条件
-   - 或者可以直接尝试加索引
+### 输入处理
 
-## Output Contract
+接受三类输入：
+1. 用户直接粘贴的慢日志文本（JSONL 格式）
+2. 用户上传的 `mongodb.log`、`.log`、`.txt`、`.jsonl` 等文件
+3. 日志文件路径
 
-默认输出顺序如下：
+**处理流程：**
 
-1. `摘要 / Summary`
-2. `归类与去重摘要 / Grouping & Dedup Summary`（批量日志时必须出现）
-3. `处理优先级 / Action Priority`
-4. `证据 / Evidence`
-5. `查询条件 / Query Shape`
-6. `为什么慢 / Why It Is Slow`
-7. `索引建议 / Index Advice`
-8. `索引创建命令 / Index Commands`
-9. `可执行优化路径 / Practical Optimization Paths`
-10. `查询优化建议 / Query Advice`
-11. `验证建议 / Validation`
-12. `参考文档 / References`\r\n\r\n报告中应尽量解释：
+1. **解析日志**（纯 AI 完成）
+   - 逐条解析 JSONL 行
+   - 提取关键字段：ns、durationMillis、planSummary、keysExamined、docsExamined、nreturned、command、aggregate pipeline
 
-- 为什么慢
-- 为什么当前计划不理想
-- 为什么是“先改查询”还是“先试索引”
-- 如果建议索引，为什么是这个字段顺序
-- 如果不建议先加索引，为什么普通索引收益不高
-- 对于“先改查询”的场景，最好额外给一节 `可执行优化路径 / Practical Optimization Paths`
-- 这一节应至少拆成：`不改 schema 可做项`、`允许新增辅助字段时可做项`
-- 查询条件本身长什么样，最好以 JSON 形式展示
-- 如果是批量日志，先告诉用户：哪些集合重复出现、哪些查询形态重复最多、每组重复了多少次
+2. **分组去重**（纯 AI 完成）
+   - 按 ns（库.集合）分组
+   - 每组内按查询形态去重
+   - 计算统计数据
 
-## References in Output
+3. **排序输出**（纯 AI 完成）
+   - 按最慢耗时降序排列各分组
+   - 每个分组内按耗时降序排列各查询形态
 
-每次完整报告都应固定带一个“参考文档 / References”小节，至少包含：
+4. **生成报告**（纯 AI 完成）
+   - 摘要
+   - 归类与去重摘要（按库表）
+   - 各库表详情（按耗时排序）
+   - 索引建议
+   - 参考文档
+   - **免责声明（文档最后）**
 
-- [MongoDB 慢查询优化](https://docs-pd.mingdao.com/deployment/components/mongodb/slowQueryOptimization)
+### Aggregate 管道分析规则
 
-如果是 HTML 输出，应把这个链接做成可点击超链接。
+**必须从日志中直接提取完整 pipeline 信息：**
 
-## HTML Expectations
+1. **提取位置**：`attr.command.aggregate` 字段
+2. **分析要点**：
+   - 首段是否为 `$match`，过滤效果如何
+   - 后续各阶段的用途
+   - 是否存在可优化的阶段
 
-如果用户要求 HTML 内容或 HTML 文件，输出应尽量满足这些要求：
+**对于 aggregate 查询的索引建议规则：**
 
-- 文首固定免责声明：
-  - `声明：内容由 AI 生成。尽管已努力确保信息的合理性，但 AI 模型仍可能产生不准确、过时或存在偏差的内容。请在执行关键操作前，务必对照 官方文档 进行核实校验。`
-- 官方文档应为可点击链接
-- 查询条件应单独展示，优先用 JSON 代码块
-- HTML 应自动生成目录（Table of Contents / 目录），桌面端默认放在左侧并支持点击跳转到各节，移动端可回退到顶部区块
-- 索引创建命令应使用代码块
-- 如果支持交互增强，代码块右上角应有复制按钮
+- 如果 pipeline 首段是 `$match` 且过滤效果好 → 可建议创建索引
+- 如果 pipeline 首段不是 `$match` → 建议业务侧优化 pipeline 结构，而非直接建索引
+- **绝对不要说"需要先分析业务需求"，应直接分析日志中已有的 pipeline 结构**
 
-### HTML 目录交互规范（必须遵守）
+**示例输出：**
 
-生成 HTML 时，目录（TOC）必须满足以下所有要求，否则视为不合格输出：
+```markdown
+### 管道结构分析
 
-1. **锚点完整性**：每个 TOC 链接的 `href`（如 `#g2`）必须在正文中存在对应的 `id` 属性。
-   - 生成 HTML 后必须自检：遍历所有 TOC 链接，确认每个 `href` 去掉 `#` 后都能在 DOM 中找到对应元素。
-   - 如果 TOC 链接指向分组（如 G1-G18），必须给每个分组的容器元素（如 `<div class="group-section" id="g2">`）加上对应 `id`。
-   - 不允许只给第一个分组加 `id` 而遗漏其余分组。
+| 阶段 | 操作 | 说明 |
+:|------|------|------|
+| $match | { "task_id": "xxx", "action": "xxx" } | 无过滤效果，匹配全表 |
+| $group | { _id: "$user_id", count: { $sum: 1 } } | 统计计数 |
+| $sort | { count: -1 } | 排序 |
 
-2. **平滑滚动**：CSS 必须包含：
-   ```css
-   html {
-     scroll-behavior: smooth;
-     scroll-padding-top: 20px;
-   }
-   ```
+**优化建议：**
+- 建议在 pipeline 首段增加时间范围过滤，减少扫描量
+- 当前 scan ratio = 930000/36，建议增加 $match 条件
+```
 
-3. **TOC 滚动高亮兼容性**：
-   - 侧边栏通常是 `position: sticky` 布局。
-   - 判断当前可见章节时，必须使用 `getBoundingClientRect().top` 而非 `element.offsetTop`，因为 `offsetTop` 在 sticky 容器下会返回错误值。
-   - 正确写法示例：
-     ```javascript
-     sections.forEach(s => {
-       if (s.getBoundingClientRect().top <= 120) {
-         current = s.id;
-       }
-     });
-     ```
+### 查询形态去重标准
 
-4. **目标元素间距**：被跳转到的目标元素应设置 `scroll-margin-top`，确保不会被页面顶部遮挡：
-   ```css
-   h2[id], h3[id], .group-section[id] {
-     scroll-margin-top: 20px;
-   }
-   ```
+去重时忽略具体值，识别以下结构特征：
+- `operation`：`find` 或 `aggregate`
+- `filter` 字段名集合
+- `filter` 操作符结构（如 `$or`、`$gt`、`$ne` 等）
+- `sort` 字段
+- `projection` 字段（用于分析，不参与去重）
+- `limit` 值
+- `pipeline` 阶段结构（aggregate 专用）
+- `planSummary` 索引使用情况
 
-5. **自检清单**：生成 HTML 后，在最终写入文件前，用以下清单自检：
-   - [ ] 每个 TOC `<a href="#xxx">` 是否都有对应的 `id="xxx"` 元素
-   - [ ] 是否包含 `scroll-behavior: smooth`
-   - [ ] 是否包含 `scroll-padding-top` 或 `scroll-margin-top`
-   - [ ] TOC 高亮是否使用 `getBoundingClientRect` 而非 `offsetTop`
+## Output Structure
 
-如果 HTML 已写入文件，任务完成时可以提供一个最小化交付提示，但不要默认增加单独的“交付结果 / Deliverables”小节。\r\n\r\n默认只需要：\r\n\r\n- 在最终回复里给出最重要产物的可点击文件路径\r\n- 如有必要，再补一个可点击目录路径\r\n- 如果是 HTML，可选补一个本地打开示例\r\n\r\n如果用户没有要求展示目录或打开方式，不要额外展开太多交付说明。\r\n\r\n在 Codex 桌面环境里，优先使用简洁的可点击路径。
+### 摘要 / Summary
 
+```markdown
+## 📊 统计摘要
 
-## Batch Output Compatibility
+| 指标 | 数值 |
+:|------|------|
+| 慢查询总数 | X 条 |
+| 涉及库表数 | X 个 |
+| 涉及集合数 | X 个 |
+| 平均执行时间 | Xms |
+| 最长执行时间 | Xms |
+```
 
-批量日志分析时，不能因为做了“按表归类 + 查询形态去重”就丢掉老的细节输出。必须同时满足这两层：
+### 归类与去重摘要 / Grouping Summary
 
-1. `汇总层 / Summary Layer`
-- 先给出按 `ns` 归类、按查询形态去重后的总览
-- 说明哪些集合重复最多、哪些查询形态重复最多、每组出现多少次
+**按库表分组，每表统计：**
+- 集合名称
+- 出现次数
+- 最慢耗时
+- 平均耗时
+- 查询形态数量
 
-2. `细节层 / Detail Layer`
-- 每个分组下面仍然必须保留一个“代表性样本 / Representative Sample”
-- 这个代表性样本应继续使用单条慢日志分析时的老结构，至少包含：
-  - `证据 / Evidence`
-  - `查询条件 / Query Shape`
-  - `为什么慢 / Why It Is Slow`
-  - `索引建议 / Index Advice`
-  - `索引创建命令 / Index Commands`
-  - `查询优化建议 / Query Advice`
-- `查询条件 / Query Shape` 不允许省略；优先展示格式化 JSON
-- 如果是 `find`，至少展示：
-  - `filter`
-  - `sort`
-  - `projection`（如果存在）
-  - `limit`（如果存在）
-- 如果是 `aggregate`，至少展示：
-  - `pipeline`
-  - 如能拆出首段 `$match`，应单独展示 `match` JSON
-- 如果同一分组的建议一致，可以合并文字说明，但查询字段结构和代表性样本不能只剩一句摘要
+**表格按用户指定维度降序排列（默认：最慢耗时）。**
 
-也就是说：
-- 新功能保留：按表归类、按查询形态去重、重复次数统计
-- 老功能保留：像手动输入单条慢日志那样，继续看到完整查询字段、证据、索引命令和优化建议
-- 推荐的最终结构应是：`先汇总，再按分组展开细节`
-## Batch Analysis Rules
+### 库表详情 / Collection Details
 
-当输入是整份日志文件、长文本、或多条慢日志时，默认按下面方式处理：
+每个库表分组下包含：
 
-1. 先按 `ns` 归类
-2. 再按“查询形态”去重
-3. 对每组输出：
-   - 所属集合
-   - 出现次数
-   - 查询形态摘要
-   - 代表性慢日志特征
-   - 代表性样本的查询条件 JSON
-   - 是否建议先改查询还是先试索引
-   - 如果能给索引建议，仍然要保留完整 `createIndex(...)` 或“当前不建议直接执行 createIndex”的模板
-4. 如果多个重复样本的建议一致，应合并输出，不要逐条重复写相同建议
-5. 如果同一集合里存在多种不同查询形态，应分成多个子组输出
+#### 1. 分组概览
+```markdown
+### {数据库名}.{集合名}
 
-## Uploaded File Handling
+| 项目 | 值 |
+|------|-----|
+| 出现次数 | X |
+| 最慢耗时 | Xms |
+| 平均耗时 | Xms |
+| 查询形态数 | X |
+| 风险等级 | 严重/警告/普通 |
+```
 
-如果用户上传了日志文件，默认应：
+**注意：库表标题使用 h3（如 `### {数据库名}.{集合名}`），比文档 h2 标题低一级。**
 
-- 直接读取用户上传文件的内容
-- 优先按 AI 方式分析，不要求用户先运行本地脚本
-- 先做归类和去重，再输出结果
-- 但输出时必须保留代表性样本的详细结构，不能只剩汇总摘要
-- 只有在用户明确要求落地导出文件时，才考虑可选脚本或本地工具
+#### 2. 查询形态详情（按耗时降序）
 
-如果用户上传文件后又要求导出结果：\r\n\r\n- 默认把结果写到工作区内可访问目录\r\n- 输入来源在报告中默认只显示文件名，不显示完整本地路径\r\n- 例如应显示 `mongodb.log`，而不是 `C:\\Users\\admin\\Downloads\\mongodb.log`\r\n- 完成后默认只返回最重要产物的可点击路径；除非用户要求，否则不要额外展开“交付结果”说明\r\n\r\n## Index Recommendation Rules
+每个查询形态包含：
 
-统一遵循这些规则：
+**形态特征：**
+```markdown
+#### 形态 {N}：{特征描述}
 
-- 等值过滤字段优先作为复合索引前缀。
-- 排序字段只有在慢日志显示排序成本明显时才纳入建议。
-- 范围字段一般放在复合索引后部，除非证据明确支持别的顺序。
-- 如果查询有 `$or` 且不同分支走不同字段，优先考虑“每个分支一套可命中的索引”。
-- 参考这篇经验文档：[MongoDB 慢查询优化](https://docs-pd.mingdao.com/deployment/components/mongodb/slowQueryOptimization)
-  - 不等于、不包含、开头不是等否定条件，通常不走索引
-  - 包含、为空、正则搜索、`$or` 条件，通常不走索引或索引收益很差
-  - 这类查询应优先改写条件或增加专门检索字段，而不是盲目补普通索引
-- 明确排除以下字段：
-  - `ctime`
-  - `status`
-- 不要为低基数字段单独建议索引。
-- 如果查询里出现 `status`，可以解释它是业务过滤条件，但不要把它纳入推荐索引定义。
-- 如果查询里出现 `ctime`，要说明它已存在索引，不需要重复建议。
-- 生成索引命令时：
-  - 不要给索引名
-  - 默认使用后台创建参数 `background: true`
+- **出现次数：** X
+- **最慢耗时：** Xms
+- **平均耗时：** Xms
+- **执行计划：** IXSCAN { xxx }
+- **风险等级：** ⚠️严重 / ⚡警告 / ✅普通
+```
 
-## Ambiguity Handling
+**代表性样本 / Representative Sample：**
+```json
+{
+  "filter": { /* 实际字段 */ },
+  "sort": { /* 实际字段 */ },
+  "projection": { /* 实际字段 */ },
+  "limit": X
+}
+```
 
-如果日志格式不完整、JSON 不标准、或过滤条件无法完全结构化提取：
+**证据 / Evidence：**
+```markdown
+- keysExamined: X
+- docsExamined: X
+- nreturned: X
+- durationMillis: X
+```
 
-- 允许直接从原始日志文本中推断 `$group`、`$or`、`$regex`、`$not`、`$size` 等特征
-- 允许给出“基于当前可见信号”的保守结论
-- 不要虚构不存在的字段
-- 如果证据不足，应明确写出“不建议先补索引”或“仅能给出临时候选建议”
+**为什么慢 / Why It Is Slow：**
+- 基于实际日志内容分析
+- 指出具体的索引使用情况和问题
 
-## Optional Local Tools
+**索引建议 / Index Advice：**
+- **仅使用日志中实际出现的字段**
+- 字段顺序：等值过滤 > 范围过滤 > 排序
 
-本 skill 可以带脚本，但脚本只是可选增强：
+**索引创建命令 / Index Commands：**
 
-1. [`scripts/extract-slowlog-signals.ps1`](./scripts/extract-slowlog-signals.ps1)
-   - 适合批量抽取日志信号
-   - 适合文件输入
-2. [`scripts/generate-slowlog-report.ps1`](./scripts/generate-slowlog-report.ps1)
-   - 适合把结果落地成文件
-   - 适合作为可选导出工具
-   - 不应替代 AI 的默认分析路径
+模板1（可直接执行）：
+```javascript
+use {数据库名}
+db.getCollection("{集合名}").createIndex(
+    {字段结构},
+    {background: true}
+)
+```
 
-如果用户只是贴一段慢日志，或者上传一个日志文件需要直接分析，不需要主动调用这些脚本。
+模板2（暂不建议执行）：
+```markdown
+当前不建议直接执行 createIndex，原因：
+- ...
+```
+
+**Aggregate 管道分析（如适用）：**
+```markdown
+### 管道结构分析
+
+| 阶段 | 操作 | 说明 |
+:|------|------|------|
+| $match | { ... } | 过滤条件分析 |
+| $group | { ... } | 聚合操作 |
+| $sort | { ... } | 排序 |
+
+**优化建议：**
+- 基于实际 pipeline 结构的优化建议
+```
+
+**改写后候选索引 / Post-Rewrite Candidate Indexes：**
+（如适用，在"暂不建议"的情况下给出）
+
+## Index Recommendation Rules
+
+### 字段选择规则
+
+**必须使用的字段（实际存在于日志中）：**
+- filter 中的等值字段（精确匹配）
+- filter 中的范围字段（$gt、$gte、$lt、$lte）
+- sort 中的排序字段
+- pipeline 首段 $match 中的字段（aggregate）
+
+**禁止使用的字段：**
+- `ctime` - 已存在索引
+- `status` - 低基数字段，不纳入索引定义
+- 日志中未出现的字段 - 绝对禁止虚构
+
+### 字段顺序规则
+
+复合索引字段顺序：
+1. **等值/精确匹配字段** → 最前
+2. **范围字段（$gt、$gte 等）** → 中间
+3. **排序字段** → 最后
+
+### 场景判断规则
+
+**可直接建索引的场景：**
+- 等值过滤 + 排序
+- 范围过滤 + 排序
+- 多字段等值过滤 + 排序
+
+**暂不建议直接建索引的场景：**
+- `$ne`、`$nin`、`$not`、`$size` 等负向条件主导
+- `$regex` 模糊匹配
+- `$or` 不同分支使用不同字段
+- aggregate 首段 $match 不存在或过滤效果差
+
+## HTML Report Rules
+
+如果用户要求生成 HTML 报告：
+
+### 必需元素
+
+1. **目录导航**
+   - 桌面端：左侧固定目录
+   - 移动端：顶部可折叠目录
+   - 支持点击跳转
+
+2. **库表分类展示**
+   - 按库表分组
+   - 每组内按耗时降序
+   - 可折叠/展开
+
+3. **代码块复制功能**
+   - 索引命令代码块带复制按钮
+
+4. **查询详情可展开**（重要！）
+   - Top N 最慢查询支持点击展开
+   - 展开内容必须包含：
+     - 完整查询命令 JSON（带语法高亮）
+     - 查询条件字段标签
+     - 排序条件
+     - 限制数量（如有）
+     - 聚合管道阶段（如有 aggregate）
+     - 扫描统计（keysExamined, docsExamined, nreturned）
+     - **查询效率指标**（可视化进度条）
+
+5. **查询效率分析**
+   - 计算公式：`效率 = nreturned / docsExamined * 100%`
+   - 分类展示：
+     - 🟢 良好 (>50%): 绿色
+     - 🟡 中等 (10-50%): 黄色
+     - 🔴 差 (<10% 或零结果): 红色
+
+### 详细查询结构规范
+
+```html
+<!-- 单个查询详情 - 可折叠 -->
+<div class="query-detail">
+    <div class="detail-header" onclick="toggleDetail('detail-{id}')">
+        <div class="detail-title">
+            #{序号} <span class="duration {high|medium|low}">{duration} ms</span>
+            <span class="badge">{namespace}</span>
+            <span class="badge">{operation}</span>
+            <!-- 问题标签 -->
+            <span class="tag danger">COLLSCAN</span>
+            <span class="tag warning">$regex</span>
+        </div>
+        <button class="expand-btn">查看详情 ▼</button>
+    </div>
+    <div class="detail-content" id="detail-{id}">
+        <!-- 执行时间、命名空间、执行计划 -->
+        <div class="detail-row">
+            <div class="detail-label">执行计划</div>
+            <div class="detail-value"><span class="plan {collscan}">{planSummary}</span></div>
+        </div>
+        
+        <!-- 查询条件字段（标签形式） -->
+        <div class="detail-row">
+            <div class="detail-label">查询字段</div>
+            <div class="detail-value">
+                <div class="filter-tags">
+                    <span class="filter-tag">{field1}</span>
+                    <span class="filter-tag">{field2}</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 扫描统计 + 效率条 -->
+        <div class="detail-row">
+            <div class="detail-label">查询效率</div>
+            <div class="detail-value">
+                {efficiency}%
+                <div class="efficiency-bar">
+                    <div class="efficiency-fill {good|medium|bad}" style="width: {efficiency}%;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 完整命令 JSON（代码块） -->
+        <div class="detail-row">
+            <div class="detail-label">完整命令</div>
+            <div class="detail-value">
+                <div class="code-block"><pre>{command_json}</pre></div>
+            </div>
+        </div>
+    </div>
+</div>
+```
+
+### 结构要求
+
+```html
+<!-- 目录 -->
+<nav class="toc">
+  <a href="#summary">统计摘要</a>
+  <a href="#grouping">库表分类</a>
+  <a href="#collection-{id}">{库.集合}</a>
+  ...
+</nav>
+
+<!-- 统计摘要 -->
+<section id="summary">...</section>
+
+<!-- 库表分类（按用户指定维度排序） -->
+<section id="grouping">
+  <h2>库表分类（按{维度}降序）</h2>
+  <div class="collection-card" id="collection-{id}">
+    <h3>{数据库名}.{集合名}</h3>
+    <!-- 查询形态详情 -->
+  </div>
+</section>
+```
+
+**注意：**
+- 库表分类标题使用 `<h2>`，如 `<h2>库表分类（按耗时降序）</h2>`
+- 每个库表项使用 `<h3>`，如 `<h3>{数据库名}.{集合名}</h3>`
+- 排序维度根据用户指定变化（最慢耗时/次数/平均耗时）
+
+### 样式规范
+
+```css
+/* 效率条 */
+.efficiency-bar { 
+    height: 8px; 
+    background: #e0e0e0; 
+    border-radius: 4px; 
+    overflow: hidden; 
+    margin-top: 5px; 
+}
+.efficiency-fill { height: 100%; border-radius: 4px; }
+.efficiency-fill.good { background: #28a745; }
+.efficiency-fill.medium { background: #ffc107; }
+.efficiency-fill.bad { background: #dc3545; }
+
+/* 查询字段标签 */
+.filter-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.filter-tag { 
+    background: #e3f2fd; 
+    color: #1565c0; 
+    padding: 2px 8px; 
+    border-radius: 4px; 
+    font-size: 11px; 
+}
+
+/* 代码块 */
+.code-block { 
+    background: #2d2d2d; 
+    color: #f8f8f2; 
+    padding: 15px; 
+    border-radius: 6px; 
+    overflow-x: auto; 
+    font-size: 12px; 
+}
+.code-block pre { 
+    white-space: pre-wrap; 
+    word-wrap: break-word; 
+    margin: 0; 
+}
+```
+
+<!-- 文档末尾：免责声明 -->
+<footer class="disclaimer">
+  ⚠️ 声明：内容由 AI 生成。尽管已努力确保信息的合理性，但 AI 模型仍可能产生不准确、过时或存在偏差的内容。请在执行关键操作前，务必对照 <a href="https://docs-pd.mingdao.com/deployment/components/mongodb/slowQueryOptimization">官方文档</a> 进行核实校验。
+</footer>
+```
+
+### 文件命名要求
+
+HTML 报告文件名必须遵循：
+```
+{日志文件名全称}-slowlog-report-{YYYYMMDDHHmmss}.html
+```
+
+例如：`mongodb.log-slowlog-report-20260410143000.html`
+
+## Disclaimer (免责声明)
+
+**文档末尾必须包含以下免责声明：**
+
+```markdown
+---
+
+## ⚠️ 免责声明
+
+声明：内容由 AI 生成。尽管已努力确保信息的合理性，但 AI 模型仍可能产生不准确、过时或存在偏差的内容。请在执行关键操作前，务必对照 [官方文档](https://docs-pd.mingdao.com/deployment/components/mongodb/slowQueryOptimization) 进行核实校验。
+```
+
+HTML 报告中以 `<footer class="disclaimer">` 包裹。
 
 ## Examples
 
-直接 AI 分析：
+### 对话分析示例
 
-- `用 $mongodb-slowlog-analysis 分析下面这段 MongoDB 4.4 慢日志，中文输出`
-- `分析这条慢日志，告诉我为什么慢、索引怎么加、查询条件怎么改`
-- `分析这个上传的 mongodb.log，按表归类并对重复查询去重汇总`
-- `不要生成文件，直接在对话里分析`
+```
+用户：分析这个 mongodb.log，按库表分类，默认排序
+助手：# MongoDB 慢查询分析报告
 
-直接让 AI 生成 Markdown / HTML 内容：
+## 📊 统计摘要
+...
 
-- `用 $mongodb-slowlog-analysis 生成一份 markdown 报告内容`
-- `用 $mongodb-slowlog-analysis 生成 html 报告内容，不依赖本地脚本`
+## 📋 库表分类（按最慢耗时降序）
 
-如果用户明确要求尝试真实文件导出，再说明：
+### mddatapipeline.task_usage_202603
+...
 
-- `md/html` 可以直接由 AI 生成并保存
-- `docx/pdf` 通常需要本地转换工具，这属于可选增强
+### mdwsrows.ws68762c2f064bec21c8abc801
+...
+```
 
-## Reference
+```
+用户：分析这个 mongodb.log，按次数排序
+助手：# MongoDB 慢查询分析报告
 
-需要复查规则时，读取 [`references/mongodb-4.4-slowlog-guidelines.md`](./references/mongodb-4.4-slowlog-guidelines.md)。重点关注：
+## 📋 库表分类（按出现次数降序）
 
-- MongoDB 4.4 慢日志信号如何解读
-- 候选索引字段如何排序
-- 为什么本项目要排除 `ctime` 和 `status`
-- [MongoDB 慢查询优化](https://docs-pd.mingdao.com/deployment/components/mongodb/slowQueryOptimization) 中关于否定条件、`$or`、正则查询和后台创建索引的经验规则
+### mdwsrows.ws64c7525be67c752002c28e76
+...
 
-## Index Output Template
+### mddatapipeline.task_usage_202603
+...
+```
 
-索引相关输出必须走下面两种模板之一，不要混用，也不要只给一个孤立的 `use 库名`：
+### HTML 生成示例
 
-1. `可直接建索引`
-   - `索引建议`：给出候选索引形态
-   - `索引创建命令`：给出完整 Mongo Shell 命令，至少包含：
-     - `use 库名`
-     - `db.getCollection("集合名").createIndex(..., { background: true })`
+```
+用户：生成 HTML 报告
+助手：[生成完整 HTML 内容，文件名：mongodb.log-slowlog-report-20260410143000.html]
+```
 
-2. `暂不建议直接建索引`
-   - `索引建议`：明确写“当前不建议直接创建普通索引”
-   - `索引创建命令`：明确写“当前不建议直接执行 createIndex，请先改写查询条件”
-   - 不要只输出 `use 库名`
-   - 如果确实需要补充，也只能补“改写完成后再回到这里生成候选索引命令”的说明
+### 排序参数说明
 
-补充规则：
-- 如果当前判断是“先改查询条件”，则不要伪造 `createIndex(...)` 命令来凑模板。
-- 这类场景必须明确写出“当前不建议直接执行 createIndex，请先改写查询条件”。
-- 不允许只输出一个孤立的 `use 库名`。
+| 参数 | 说明 | 默认值 |
+:|------|------|--------|
+| `max_duration` | 最慢耗时降序 | ✅ 是 |
+| `count` | 出现次数降序 | 否 |
+| `avg_duration` | 平均耗时降序 | 否 |
 
-## Post-Rewrite Candidates
+用户可通过以下方式指定：
+- "按次数排序"
+- "按平均耗时排序"
+- "按最慢耗时排序"（默认）
 
-如果当前结论是“暂不建议直接建索引”，但日志里仍然能看出较明确的正向过滤字段、范围字段或排序字段，则报告应额外给出一个：
+## References
 
-- `改写后候选索引 / Post-Rewrite Candidate Indexes`
+每次报告必须包含参考文档链接：
 
-这一节的作用是：
-- 先明确“不是现在就执行 createIndex”
-- 再保留“等你把查询改写成正向可索引条件后，优先测试哪组索引”的方向
-
-输出要求：
-- 这一节只能给“候选索引形态”，不能伪装成当前可直接执行的索引命令
-- 如果是 `$or` 场景，可以额外给出“分支索引”示例
-- 如果存在较明确的单一路径候选，应标记为 `主候选索引 / Primary candidate index`
-- 如果存在 `$or` 分支拆分后的候选，应标记为 `分支候选索引 / Branch candidate indexes`
-- 这一节应放在 `索引创建命令` 之后、`查询优化建议` 之前
-
-## Fixed Keys Rule
-
-对于这类 MongoDB 动态业务字段，默认视为：
-- 字段 key 固定
-- 不允许为了优化慢查询而随意重命名已有字段 key
-
-因此在给建议时必须遵守：
-- 不要建议“把现有字段改名”
-- 不要把“重命名原字段 key”当作优化方案
-- 如果同一字段在日志里同时出现等值判断和 `$size/$not/$ne` 等复杂谓词，应把它标记为“混合约束字段”，不要把它直接当作可建索引前缀
-- 对混合约束字段，只能建议：保留原字段 key 不变；若业务允许，增加辅助字段来承接这些复杂判断
-- 如果业务允许，可以建议“在保留原字段 key 不变的前提下新增辅助字段/派生字段”
-- 如果业务也不允许新增字段，则应优先建议：
-  - 收敛查询条件
-  - 预聚合
-  - 报表中间表
-  - 专门检索方案
-
-在 aggregate 场景下尤其要注意：
-- `regex`
-- `$ne/$nin/$not/$size`
-- 复杂 `$or`
-这些场景可以建议“新增辅助字段”，但不能建议“改原字段 key”。
-
-
-
-
+- [MongoDB 慢查询优化](https://docs-pd.mingdao.com/deployment/components/mongodb/slowQueryOptimization)
+- [MongoDB Query Optimization](https://docs.mongodb.com/manual/core/query-optimization/)
+- [Compound Indexes](https://docs.mongodb.com/manual/core/index-compound/)

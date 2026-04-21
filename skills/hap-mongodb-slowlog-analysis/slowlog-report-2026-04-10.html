@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MongoDB 慢日志分析报告</title>
+  <style>
+    :root {
+      --bg: #f4f1e8;
+      --paper: #fffdf8;
+      --ink: #1f2937;
+      --muted: #5b6472;
+      --line: #ded6c6;
+      --accent: #0f766e;
+      --accent-2: #d97706;
+      --danger: #b91c1c;
+      --code: #f6f3eb;
+      --shadow: 0 18px 40px rgba(31, 41, 55, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 28%),
+        radial-gradient(circle at top right, rgba(217, 119, 6, 0.08), transparent 24%),
+        linear-gradient(180deg, #f7f4ec 0%, var(--bg) 100%);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .toc {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100vh;
+      padding: 28px 20px;
+      border-right: 1px solid rgba(222, 214, 198, 0.9);
+      background: rgba(255, 253, 248, 0.8);
+      backdrop-filter: blur(10px);
+    }
+
+    .toc h1 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      line-height: 1.3;
+    }
+
+    .toc p {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .toc a {
+      display: block;
+      padding: 10px 12px;
+      margin: 6px 0;
+      border-radius: 10px;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 14px;
+      transition: background 0.2s ease, transform 0.2s ease;
+    }
+
+    .toc a:hover {
+      background: rgba(15, 118, 110, 0.08);
+      transform: translateX(2px);
+    }
+
+    main {
+      padding: 34px;
+    }
+
+    .hero, .section {
+      background: var(--paper);
+      border: 1px solid rgba(222, 214, 198, 0.95);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 28px;
+      margin-bottom: 22px;
+    }
+
+    .disclaimer {
+      margin: 0 0 18px;
+      padding: 14px 16px;
+      border-left: 4px solid var(--accent-2);
+      background: #fff7ed;
+      border-radius: 12px;
+      color: #7c4a03;
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    .hero h2 {
+      margin: 0 0 10px;
+      font-size: 32px;
+      line-height: 1.2;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    .metric {
+      padding: 18px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #fcfbf7 0%, #f5f2ea 100%);
+      border: 1px solid var(--line);
+    }
+
+    .metric .label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .metric .value {
+      margin-top: 6px;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .section {
+      padding: 26px;
+      margin-bottom: 20px;
+    }
+
+    .section h3 {
+      margin: 0 0 16px;
+      font-size: 24px;
+    }
+
+    .section h4 {
+      margin: 22px 0 10px;
+      font-size: 18px;
+    }
+
+    .section p, .section li {
+      line-height: 1.8;
+      color: var(--ink);
+    }
+
+    ul {
+      padding-left: 20px;
+      margin: 10px 0 0;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      margin: 0 8px 8px 0;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(15, 118, 110, 0.1);
+      color: var(--accent);
+    }
+
+    .warn {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    pre {
+      position: relative;
+      overflow: auto;
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--code);
+      border: 1px solid var(--line);
+      line-height: 1.6;
+      font-size: 13px;
+    }
+
+    code {
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    .copy {
+      position: sticky;
+      top: 10px;
+      float: right;
+      margin-left: 12px;
+      border: 0;
+      border-radius: 999px;
+      padding: 7px 11px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .callout {
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(15, 118, 110, 0.18);
+      background: rgba(15, 118, 110, 0.06);
+    }
+
+    .ref a {
+      color: var(--accent);
+    }
+
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .toc {
+        position: relative;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid rgba(222, 214, 198, 0.9);
+      }
+      main { padding: 18px; }
+      .hero h2 { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="toc">
+      <h1>慢日志分析报告</h1>
+      <p>输入来源：用户粘贴的 2 条 MongoDB 慢日志。桌面端可点击目录快速跳转。</p>
+      <a href="#summary">摘要</a>
+      <a href="#grouping">归类与去重摘要</a>
+      <a href="#priority">处理优先级</a>
+      <a href="#case1">分组 1：aggregate COLLSCAN</a>
+      <a href="#case2">分组 2：find + sort</a>
+      <a href="#conclusion">结论</a>
+      <a href="#references">参考文档</a>
+    </aside>
+
+    <main>
+      <section class="hero" id="summary">
+        <p class="disclaimer">
+          声明：内容由 AI 生成。尽管已努力确保信息的合理性，但 AI 模型仍可能产生不准确、过时或存在偏差的内容。请在执行关键操作前，务必对照
+          <a href="https://docs-pd.mingdao.com/deployment/components/mongodb/slowQueryOptimization" target="_blank" rel="noreferrer">官方文档</a>
+          进行核实校验。
+        </p>
+        <h2>MongoDB 慢日志分析</h2>
+        <p>
+          这 2 条慢日志属于两种不同的慢查形态。第一条是 <span class="warn">aggregate + $or + count</span> 走
+          <code>COLLSCAN</code>；第二条是 <span class="warn">find + sort(utime:-1) + limit:1</span>
+          虽然用了索引，但索引顺序不匹配过滤条件，导致大范围扫描。
+        </p>
+        <div class="grid">
+          <div class="metric">
+            <div class="label">最重扫描量</div>
+            <div class="value">863,929 docs</div>
+          </div>
+          <div class="metric">
+            <div class="label">最大读盘</div>
+            <div class="value">3.17 GB</div>
+          </div>
+          <div class="metric">
+            <div class="label">最长耗时</div>
+            <div class="value">2910 ms</div>
+          </div>
+          <div class="metric">
+            <div class="label">优先动作</div>
+            <div class="value">补索引 + 改写查询</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="grouping">
+        <h3>归类与去重摘要</h3>
+        <div class="pill">ns: mdwsrows.ws66b9e2332b725be4266d4a27</div>
+        <div class="pill">aggregate</div>
+        <div class="pill">COLLSCAN</div>
+        <p>查询形态：<code>$match</code> 里有两个等值 <code>$or</code> 分支，后接 <code>$group count</code>。</p>
+
+        <div class="pill">ns: mdwsrows.ws689f0afb123c994a446ac668</div>
+        <div class="pill">find</div>
+        <div class="pill">IXSCAN { utime: 1 }</div>
+        <p>查询形态：单字段等值过滤 + <code>utime:-1</code> 排序 + <code>limit:1</code>。</p>
+      </section>
+
+      <section class="section" id="priority">
+        <h3>处理优先级</h3>
+        <ul>
+          <li>先处理第一条 <code>COLLSCAN</code>，因为它扫描了 86 万+ 文档，并读取约 3.17 GB 数据。</li>
+          <li>再处理第二条查询，它属于“已有索引但索引顺序不对”的典型场景，修复成本较低。</li>
+        </ul>
+      </section>
+
+      <section class="section" id="case1">
+        <h3>分组 1：aggregate + $or + count</h3>
+        <h4>证据</h4>
+        <ul>
+          <li><code>planSummary: COLLSCAN</code></li>
+          <li><code>keysExamined: 0</code></li>
+          <li><code>docsExamined: 863929</code></li>
+          <li><code>nreturned: 1</code></li>
+          <li><code>durationMillis: 2910</code></li>
+          <li><code>bytesRead: 3171855256</code></li>
+        </ul>
+
+        <h4>查询条件 / Query Shape</h4>
+        <pre><button class="copy" data-copy="case1-query">复制</button><code id="case1-query">{
+  "operation": "aggregate",
+  "pipeline": [
+    {
+      "$match": {
+        "$or": [
+          { "632a7c14a64afd17d12d6892": "8b5935a9-2763-4975-ba3a-be43732d6aa4" },
+          { "67e142b4a435fc5e6a9976e7": "8b5935a9-2763-4975-ba3a-be43732d6aa4" }
+        ],
+        "status": 1
+      }
+    },
+    {
+      "$group": {
+        "_id": "null",
+        "count": { "$sum": 1 }
+      }
+    }
+  ]
+}</code></pre>
+
+        <h4>为什么慢</h4>
+        <ul>
+          <li>首段 <code>$match</code> 没有命中可用索引，直接全表扫描。</li>
+          <li><code>$or</code> 使用两个不同字段，通常需要“每个分支各自有索引”，否则容易退化成 <code>COLLSCAN</code>。</li>
+          <li>这条本质上是在做计数，但用了 <code>aggregate + $group</code>，上游扫描成本被完整放大。</li>
+          <li><code>status</code> 是低基数字段，不建议放进索引定义。</li>
+        </ul>
+
+        <h4>索引建议</h4>
+        <div class="callout">
+          先分别为两个 <code>$or</code> 分支补单字段索引，再评估是否还需要进一步改写查询。
+        </div>
+
+        <h4>索引创建命令</h4>
+        <pre><button class="copy" data-copy="case1-index">复制</button><code id="case1-index">use mdwsrows
+db.getCollection("ws66b9e2332b725be4266d4a27").createIndex(
+  { "632a7c14a64afd17d12d6892": 1 },
+  { background: true }
+)
+
+db.getCollection("ws66b9e2332b725be4266d4a27").createIndex(
+  { "67e142b4a435fc5e6a9976e7": 1 },
+  { background: true }
+)</code></pre>
+
+        <h4>可执行优化路径</h4>
+        <ul>
+          <li>先补两个 <code>$or</code> 分支索引。</li>
+          <li>把 <code>aggregate + $group count</code> 改成 <code>countDocuments(...)</code>。</li>
+          <li>如果这是高频统计，长期更适合做预聚合或统一辅助字段。</li>
+        </ul>
+
+        <h4>验证建议</h4>
+        <pre><button class="copy" data-copy="case1-verify">复制</button><code id="case1-verify">db.getCollection("ws66b9e2332b725be4266d4a27").explain("executionStats").countDocuments({
+  $or: [
+    { "632a7c14a64afd17d12d6892": "8b5935a9-2763-4975-ba3a-be43732d6aa4" },
+    { "67e142b4a435fc5e6a9976e7": "8b5935a9-2763-4975-ba3a-be43732d6aa4" }
+  ],
+  status: 1
+})</code></pre>
+      </section>
+
+      <section class="section" id="case2">
+        <h3>分组 2：find + sort + limit:1</h3>
+        <h4>证据</h4>
+        <ul>
+          <li><code>planSummary: IXSCAN { utime: 1 }</code></li>
+          <li><code>keysExamined: 88934</code></li>
+          <li><code>docsExamined: 88934</code></li>
+          <li><code>nreturned: 0</code></li>
+          <li><code>durationMillis: 337</code></li>
+        </ul>
+
+        <h4>查询条件 / Query Shape</h4>
+        <pre><button class="copy" data-copy="case2-query">复制</button><code id="case2-query">{
+  "operation": "find",
+  "filter": {
+    "68a43976123c994a446da1fe": "115590026165698569980",
+    "status": 1
+  },
+  "sort": {
+    "utime": -1
+  },
+  "projection": {
+    "status": 0,
+    "sharerange": 0,
+    "wsutime": 0,
+    "keywords": 0,
+    "discussunreads": 0,
+    "users": 0,
+    "owners": 0,
+    "unreads": 0
+  },
+  "limit": 1
+}</code></pre>
+
+        <h4>为什么慢</h4>
+        <ul>
+          <li>当前只命中了 <code>utime</code> 索引。</li>
+          <li>MongoDB 为了满足排序，沿 <code>utime</code> 扫描，再逐条回表判断过滤条件。</li>
+          <li><code>limit:1</code> 理论上应该很快，但因为索引顺序不对，导致扫描了近 8.9 万条记录。</li>
+        </ul>
+
+        <h4>索引建议</h4>
+        <div class="callout">
+          高置信度建议：按“等值过滤字段在前，排序字段在后”的顺序建立复合索引。
+        </div>
+
+        <h4>索引创建命令</h4>
+        <pre><button class="copy" data-copy="case2-index">复制</button><code id="case2-index">use mdwsrows
+db.getCollection("ws689f0afb123c994a446ac668").createIndex(
+  { "68a43976123c994a446da1fe": 1, "utime": -1 },
+  { background: true }
+)</code></pre>
+
+        <h4>可执行优化路径</h4>
+        <ul>
+          <li>直接先补复合索引。</li>
+          <li>建完后重新跑 <code>explain("executionStats")</code>。</li>
+          <li>如果仍扫描很大，再排查字段值类型是否一致、是否存在脏数据。</li>
+        </ul>
+
+        <h4>验证建议</h4>
+        <pre><button class="copy" data-copy="case2-verify">复制</button><code id="case2-verify">db.getCollection("ws689f0afb123c994a446ac668").explain("executionStats").find(
+  {
+    "68a43976123c994a446da1fe": "115590026165698569980",
+    status: 1
+  }
+).sort({ utime: -1 }).limit(1)</code></pre>
+      </section>
+
+      <section class="section" id="conclusion">
+        <h3>结论</h3>
+        <p>
+          第一条是“缺少 <code>$or</code> 分支索引”的典型全表扫描，优先补两个分支索引，再把统计写法改成
+          <code>countDocuments</code>。第二条是“已有索引但索引顺序不对”，直接补
+          <code>{ 等值字段, utime: -1 }</code> 复合索引，收益会比较直接。
+        </p>
+      </section>
+
+      <section class="section ref" id="references">
+        <h3>参考文档</h3>
+        <ul>
+          <li>
+            <a href="https://docs-pd.mingdao.com/deployment/components/mongodb/slowQueryOptimization" target="_blank" rel="noreferrer">
+              MongoDB 慢查询优化
+            </a>
+          </li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    document.querySelectorAll(".copy").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var target = document.getElementById(button.getAttribute("data-copy"));
+        if (!target) return;
+        navigator.clipboard.writeText(target.textContent).then(function () {
+          var old = button.textContent;
+          button.textContent = "已复制";
+          setTimeout(function () { button.textContent = old; }, 1200);
+        });
+      });
+    });
+  </script>
+</body>
+</html>
