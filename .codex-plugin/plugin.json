@@ -13,6 +13,7 @@
     "hap"
   ],
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "HAP MongoDB Slowlog Analysis",
     "shortDescription": "Analyze MongoDB slow logs and suggest practical fixes",

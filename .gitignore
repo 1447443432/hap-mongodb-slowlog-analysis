@@ -3,6 +3,7 @@ Thumbs.db
 Desktop.ini
 .idea/
 .vscode/
+node_modules/
 *.tmp
 *.bak
 *.orig

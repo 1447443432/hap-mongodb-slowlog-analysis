@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hap-mongodb-slowlog-analysis": {
+      "command": "node",
+      "args": [
+        "./scripts/mcp-server.js"
+      ],
+      "cwd": "."
+    }
+  }
+}

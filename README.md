@@ -255,6 +255,58 @@ Then restart Codex if needed.
 powershell -ExecutionPolicy Bypass -File .\scripts\install-local.ps1
 ```
 
+## Official App / MCP route
+
+If your goal is to move closer to the officially supported Codex app path instead of relying on local skill discovery, this repository now includes a minimal MCP plugin skeleton.
+
+### Files added for MCP
+
+- `.mcp.json`
+- `package.json`
+- `scripts/mcp-server.js`
+
+### Install dependencies
+
+Run in the repository root:
+
+```powershell
+npm install
+```
+
+### Local MCP smoke check
+
+Check server syntax:
+
+```powershell
+npm run check
+```
+
+Start the server manually:
+
+```powershell
+npm run mcp
+```
+
+### What this MCP server exposes
+
+- Tool name: `analyze_mongodb_slowlog`
+- Input:
+  - `slowlog`: MongoDB slowlog JSON string
+  - `format`: `text` or `html`
+- Output:
+  - concise analysis text
+  - or basic HTML string
+
+### How to use this for the official app path
+
+The practical direction is:
+
+1. Keep the skill for local prompt usage.
+2. Use `.mcp.json` + MCP server as the official-facing integration unit.
+3. In Codex / ChatGPT Developer mode, prefer the `Create app` / `Import MCP` route rather than relying on local skill UI indexing.
+
+This does not guarantee appearance in the Personal Skills panel, but it moves the project toward the officially supported app/plugin path instead of undocumented local discovery behavior.
+
 ## Notes
 
 - The skill can be used by prompt even if the current Codex UI does not list it in "Personal skills".
