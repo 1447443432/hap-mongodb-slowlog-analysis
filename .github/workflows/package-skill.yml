@@ -1,0 +1,54 @@
+name: Package Skill
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "skills/**"
+      - "scripts/**"
+      - "agents/**"
+      - ".codex-plugin/**"
+      - "README.md"
+      - ".gitignore"
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate MCP server
+        run: npm run check
+
+      - name: Validate skill rules
+        shell: pwsh
+        run: .\scripts\validate-skill.ps1
+
+      - name: Test install into temporary Codex home
+        shell: pwsh
+        run: .\scripts\test-install.ps1
+
+      - name: Package skill
+        shell: pwsh
+        run: .\scripts\package-skill.ps1
+
+      - name: Upload packaged skill artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hap-mongodb-slowlog-analysis-skill-upload
+          path: |
+            dist/hap-mongodb-slowlog-analysis-skill-upload.zip
+            dist/skill-upload/hap-mongodb-slowlog-analysis
+          if-no-files-found: error

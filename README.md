@@ -93,6 +93,31 @@ That produces:
 
 The folder export is the safest option for any future "upload a skill from your computer" flow. The zip is a convenience artifact for sharing or archiving.
 
+## Download the packaged build from GitHub
+
+Right now, the packaged zip is not stored directly in the repository tree by default. Instead, it is produced in two ways:
+
+1. Locally, by running:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-skill.ps1
+```
+
+2. On GitHub, through the workflow:
+
+```text
+.github/workflows/package-skill.yml
+```
+
+After you push to `main` or manually trigger the workflow in GitHub Actions, you can download:
+
+- the packaged zip artifact
+- the upload-ready skill folder artifact
+
+from the workflow run's Artifacts section.
+
+If you want a one-click download from the repository homepage itself, the next step would be adding a GitHub Release flow that attaches the zip as a release asset.
+
 ## Use in Codex
 
 Use it directly by name:
