@@ -4,6 +4,7 @@ Desktop.ini
 .idea/
 .vscode/
 node_modules/
+dist/
 *.tmp
 *.bak
 *.orig

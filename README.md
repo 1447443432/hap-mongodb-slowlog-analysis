@@ -60,7 +60,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\sync-local.ps1
 
 ## Validation
 
-Validate the skill rules and package metadata:
+Validate the rule set and package metadata:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\validate-skill.ps1
@@ -77,6 +77,21 @@ Check the MCP server syntax:
 ```powershell
 npm run check
 ```
+
+## Package for upload
+
+Build a clean export folder and zip:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-skill.ps1
+```
+
+That produces:
+
+- `dist\skill-upload\hap-mongodb-slowlog-analysis\`
+- `dist\hap-mongodb-slowlog-analysis-skill-upload.zip`
+
+The folder export is the safest option for any future "upload a skill from your computer" flow. The zip is a convenience artifact for sharing or archiving.
 
 ## Use in Codex
 
@@ -102,7 +117,8 @@ What that means in practice:
 
 1. Open ChatGPT and go to the Skills page for your account or workspace.
 2. Create a new skill or use the "upload from your computer" flow if that option is available in your plan/workspace.
-3. If you are on a managed workspace, publish/share it to the workspace skills library according to your admin permissions.
+3. Use the export created by `package-skill.ps1` as the upload source.
+4. If you are on a managed workspace, publish/share it to the workspace skills library according to your admin permissions.
 
 Important notes:
 
@@ -141,6 +157,7 @@ npm run mcp
 - `scripts/sync-local.ps1`: sync local changes after edits
 - `scripts/test-install.ps1`: install into a temporary Codex home and verify required files
 - `scripts/validate-skill.ps1`: validate that the skill/package still follows the enforced rule set
+- `scripts/package-skill.ps1`: build an upload-ready folder and zip
 - `scripts/mcp-server.js`: MCP tool implementation
 - `scripts/publish-github.ps1`: commit/publish helper
 
