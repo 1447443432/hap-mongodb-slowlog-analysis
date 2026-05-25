@@ -254,6 +254,14 @@ Current GitHub remote:
 git@github.com:1447443432/hap-mongodb-slowlog-analysis.git
 ```
 
+If SSH push is unstable on the current network, switch the repository to HTTPS:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\use-https-remote.ps1
+```
+
+Then push again with normal git commands or the publish scripts.
+
 ## Reference
 
 - [MongoDB 慢查询优化](https://docs-pd.mingdao.com/deployment/components/mongodb/slowQueryOptimization)
