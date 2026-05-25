@@ -51,6 +51,27 @@ After editing the skill, sync it again:
 powershell -ExecutionPolicy Bypass -File .\scripts\sync-local.ps1
 ```
 
+To verify that the repository is installable on a fresh Codex home, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test-install.ps1
+```
+
+The installer supports `CODEX_HOME`. If another Codex instance uses a custom home directory:
+
+```powershell
+$env:CODEX_HOME="D:\path\to\.codex"
+powershell -ExecutionPolicy Bypass -File .\scripts\install-local.ps1
+```
+
+The install script verifies these required files after copying:
+
+- `SKILL.md`
+- `_meta.json`
+- `_skillhub_meta.json`
+- `agents/openai.yaml`
+- `references/mongodb-4.4-slowlog-guidelines.md`
+
 ## Use In Codex
 
 Use it directly by name:

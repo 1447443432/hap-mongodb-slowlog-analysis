@@ -11,9 +11,25 @@ $skillHubMetaSource = Join-Path $skillSource "_skillhub_meta.json"
 $pluginManifestSource = Join-Path $repoRoot ".codex-plugin\plugin.json"
 $pluginAgentsSource = Join-Path $repoRoot "agents"
 $pluginAssetsSource = Join-Path $repoRoot "assets"
-$codexHome = Join-Path $env:USERPROFILE ".codex"
+$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }
 $skillsRoot = Join-Path $codexHome "skills"
 $skillTarget = Join-Path $skillsRoot $pluginName
+
+function Assert-FileExists {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Required file missing: $Path"
+    }
+}
+
+Assert-FileExists (Join-Path $skillSource "SKILL.md")
+Assert-FileExists (Join-Path $skillSource "_meta.json")
+Assert-FileExists (Join-Path $skillSource "_skillhub_meta.json")
+Assert-FileExists (Join-Path $skillSource "agents\openai.yaml")
 
 New-Item -ItemType Directory -Force $skillsRoot | Out-Null
 if (Test-Path -LiteralPath $skillTarget) {
@@ -23,7 +39,12 @@ Copy-Item -LiteralPath $skillSource -Destination $skillTarget -Recurse -Force
 if ((Test-Path -LiteralPath $skillHubMetaSource) -and -not (Test-Path -LiteralPath (Join-Path $skillTarget "_skillhub_meta.json"))) {
     Copy-Item -LiteralPath $skillHubMetaSource -Destination (Join-Path $skillTarget "_skillhub_meta.json") -Force
 }
+Assert-FileExists (Join-Path $skillTarget "SKILL.md")
+Assert-FileExists (Join-Path $skillTarget "_meta.json")
+Assert-FileExists (Join-Path $skillTarget "_skillhub_meta.json")
+Assert-FileExists (Join-Path $skillTarget "agents\openai.yaml")
 Write-Host "Synced skill to: $skillTarget"
+Write-Host "Codex home: $codexHome"
 
 if ($IncludePluginCatalog) {
     $catalogRoot = Join-Path $codexHome ".tmp\plugins"
