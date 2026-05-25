@@ -256,6 +256,9 @@ function summarizeEvent(event) {
     findings.push(
       "_id 默认已有索引；如果执行计划走 IXSCAN { _id: 1 }，它主要是在服务排序，不代表业务过滤也被高效命中。"
     );
+    rewriteAdvice.push(
+      "不要建议创建单字段 { _id: 1 } 索引；只有 explain 证明排序仍是瓶颈时，才把 _id 作为复合索引尾部排序键评估。"
+    );
   }
 
   if (typeof bytesRead === "number" && bytesRead > 1024 * 1024 * 512) {
@@ -274,10 +277,16 @@ function summarizeEvent(event) {
     indexAdvice.push("当前不建议直接执行 createIndex，请先把不走索引或索引收益差的条件改成精确等值查询。");
     if (strongEqualityFields.length) {
       const spec = Object.fromEntries(strongEqualityFields.slice(0, 2).map((field) => [field, 1]));
-      if (sortField) {
+      if (sortField && sortField !== "_id") {
         spec[sortField] = sort[sortField];
       }
+      if (signals.rangeFields.length) {
+        spec[signals.rangeFields[0]] = 1;
+      }
       indexAdvice.push(`改写后可优先测试候选索引：${pretty(spec)}。`);
+      if (sortField === "_id") {
+        indexAdvice.push("注意：_id 默认已有索引；当前候选索引不默认包含 _id。等 explain 证明仍需要保序优化时，再评估把 _id 作为复合索引尾部排序键。");
+      }
     }
   } else if (operation === "find" && strongEqualityFields.length) {
     const spec = Object.fromEntries(strongEqualityFields.slice(0, 2).map((field) => [field, 1]));
@@ -287,6 +296,9 @@ function summarizeEvent(event) {
       spec[signals.rangeFields[0]] = 1;
     }
     indexAdvice.push(`可以直接测试复合索引：${pretty(spec)}。`);
+    if (sortField === "_id") {
+      indexAdvice.push("这里的 _id 是复合索引里的尾部排序键，不是建议创建单字段 _id 索引；_id 单字段索引 MongoDB 已默认存在。");
+    }
     indexCommands.push(buildIndexCommand(ns, spec));
   } else {
     indexAdvice.push("当前可索引信号不足，建议先补完整 slowlog 或 explain，再决定索引。");

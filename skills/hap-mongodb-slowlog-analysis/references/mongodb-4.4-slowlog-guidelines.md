@@ -88,6 +88,11 @@ When either field appears in the query:
 - Say whether the sort likely benefits from index support.
 - Recommend matching sort direction when it matters.
 - Avoid recommending a sort-supporting index if the visible filter is too weak or dominated by excluded fields.
+- Treat `_id` as already indexed by default.
+- Never recommend creating a single-field `_id` index.
+- When `sort: { _id: 1/-1 }` appears with business filters, explain that `_id` may only be serving sort order.
+- Only include `_id` as the trailing key of a compound index when planner evidence shows `_id` sort order is still a bottleneck after query predicates are index-friendly.
+- For incomplete command payloads without `planSummary`, do not include `_id` in post-rewrite candidate indexes by default; mention it as something to re-evaluate after `explain("executionStats")`.
 
 ### If the Query Returns Too Many Fields
 

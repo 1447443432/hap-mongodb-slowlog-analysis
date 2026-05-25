@@ -278,7 +278,9 @@ description: Analyze MongoDB 4.4.x slow logs from pasted slow-log text, uploaded
 - 如果查询有 `$or` 且不同分支走不同字段，优先考虑“每个分支一套可命中的索引”。
 - `_id` 字段默认已有索引。看到 `planSummary: IXSCAN { _id: 1 }` 或 `IXSCAN { _id: -1 }` 时，不要说“缺少 `_id` 索引”。
 - 如果查询同时有业务字段过滤和 `sort: { _id: 1/-1 }`，且日志显示 `IXSCAN { _id: ... }`、`docsExamined` 很高、`nreturned` 很低，应说明：当前 `_id` 默认索引主要在服务排序，不能同时高效完成业务字段过滤。
-- 这类场景推荐的是“过滤字段 + `_id`”复合索引，例如 `{ "业务过滤字段": 1, "_id": 1 }`，不是重复创建单字段 `_id` 索引。
+- 这类场景不要建议创建单字段 `{ "_id": 1 }` 索引，也不要把建议表述成“给 `_id` 建索引”。
+- 只有当查询已改写成正向等值/范围条件，且完整 slowlog 或 explain 显示排序仍由 `_id` 路径导致大量扫描时，才建议把 `_id` 作为复合索引的尾部排序键，例如 `{ "业务过滤字段": 1, "_id": 1 }`。
+- 对只有查询命令体、没有执行计划的复杂 `$or` / 空值混合查询，改写后候选索引默认先给业务等值字段和范围字段，不要默认把 `_id` 放进候选索引；只补充说明“如 explain 证明仍需按 `_id` 保序，再评估把 `_id` 作为复合索引尾部排序键”。
 - 参考这篇经验文档：[MongoDB 慢查询优化](https://docs-pd.mingdao.com/deployment/components/mongodb/slowQueryOptimization)
   - 不等于、不包含、开头不是等否定条件，通常不走索引
   - 包含、为空、正则搜索、`$or` 条件，通常不走索引或索引收益很差
