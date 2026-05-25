@@ -93,30 +93,42 @@ That produces:
 
 The folder export is the safest option for any future "upload a skill from your computer" flow. The zip is a convenience artifact for sharing or archiving.
 
-## Download the packaged build from GitHub
+## Download from GitHub
 
-Right now, the packaged zip is not stored directly in the repository tree by default. Instead, it is produced in two ways:
+There are now two GitHub download paths.
 
-1. Locally, by running:
+### 1. Actions artifacts
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-skill.ps1
-```
-
-2. On GitHub, through the workflow:
+Workflow:
 
 ```text
 .github/workflows/package-skill.yml
 ```
 
-After you push to `main` or manually trigger the workflow in GitHub Actions, you can download:
+After you push to `main` or manually run the workflow, download the packaged zip or upload-ready folder from the workflow run's **Artifacts** section.
 
-- the packaged zip artifact
-- the upload-ready skill folder artifact
+### 2. Releases page
 
-from the workflow run's Artifacts section.
+Workflow:
 
-If you want a one-click download from the repository homepage itself, the next step would be adding a GitHub Release flow that attaches the zip as a release asset.
+```text
+.github/workflows/release-skill.yml
+```
+
+This is the path for the "click from repository homepage and download zip" experience.
+
+You can use it in either mode:
+
+1. Push a tag like `v1.1.1`
+2. Or manually run the workflow in GitHub Actions and provide:
+   - `tag_name`
+   - `release_name`
+
+When it finishes, GitHub creates a Release and attaches:
+
+- `hap-mongodb-slowlog-analysis-skill-upload.zip`
+
+That file can then be downloaded directly from the repository's **Releases** page.
 
 ## Use in Codex
 
@@ -142,7 +154,7 @@ What that means in practice:
 
 1. Open ChatGPT and go to the Skills page for your account or workspace.
 2. Create a new skill or use the "upload from your computer" flow if that option is available in your plan/workspace.
-3. Use the export created by `package-skill.ps1` as the upload source.
+3. Use the export created by `package-skill.ps1`, or download the packaged zip from GitHub Releases.
 4. If you are on a managed workspace, publish/share it to the workspace skills library according to your admin permissions.
 
 Important notes:
