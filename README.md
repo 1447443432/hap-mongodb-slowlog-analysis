@@ -2,22 +2,21 @@
 
 Codex skill/plugin for HAP MongoDB slow-log analysis.
 
-It analyzes pasted MongoDB slow logs or query command JSON, explains why a query is slow, and gives practical rewrite/index advice. The current rule set is tuned for HAP dynamic worksheet collections and MongoDB 4.4.
+It analyzes pasted MongoDB slow logs or raw query JSON, explains why a query is slow, and gives practical rewrite/index advice. The current rule set is tuned for HAP dynamic worksheet collections and MongoDB 4.4.
 
-## Key Rules
+## What this skill enforces
 
 - For HAP worksheet collections whose names start with `ws`, treat `_id`, `utime`, `rowid`, and `ctime` single-field indexes as existing defaults.
 - Do not recommend recreating single-field `_id`, `utime`, `rowid`, or `ctime` indexes for `ws*` collections.
 - Treat `status` as low-cardinality and do not include it in recommended index definitions.
-- Treat `ctime` as already indexed and do not recommend a new index on it.
-- For `$ne`, `$nin`, `$not`, "not contains", "does not start with", regex contains search, and mixed empty checks, prefer query rewrite before ordinary indexes.
-- For `null` / `""` / empty array / `$size: 0` / missing-field checks, prefer normalizing writes to a single default value on the original field, then query by exact equality.
-- Keep existing dynamic field keys stable. Do not recommend renaming fields.
+- For `$ne`, `$nin`, `$not`, mixed empty checks, and ordinary regex contains search, prefer query rewrite before ordinary indexes.
+- For `null` / `""` / missing / empty-array checks, prefer normalizing writes to one canonical default value on the original field, then query by exact equality.
+- Keep existing dynamic field keys stable. Do not recommend renaming fields. Do not default to helper fields.
 
 Example rewrite:
 
 ```javascript
-// Before: hard to index well
+// Before
 {
   $or: [
     { field: null },
@@ -26,15 +25,15 @@ Example rewrite:
   ]
 }
 
-// After: normalize writes, then use exact equality
+// After
 {
   field: "__EMPTY__"
 }
 ```
 
-## Local Install
+## Local install into Codex
 
-Clone this repository, then run from the repository root:
+From the repository root:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-local.ps1
@@ -46,34 +45,40 @@ This installs the skill to:
 %USERPROFILE%\.codex\skills\hap-mongodb-slowlog-analysis
 ```
 
-After editing the skill, sync it again:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\sync-local.ps1
-```
-
-To verify that the repository is installable on a fresh Codex home, run:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\test-install.ps1
-```
-
-The installer supports `CODEX_HOME`. If another Codex instance uses a custom home directory:
+If another Codex instance uses a custom home directory:
 
 ```powershell
 $env:CODEX_HOME="D:\path\to\.codex"
 powershell -ExecutionPolicy Bypass -File .\scripts\install-local.ps1
 ```
 
-The install script verifies these required files after copying:
+After edits, sync again:
 
-- `SKILL.md`
-- `_meta.json`
-- `_skillhub_meta.json`
-- `agents/openai.yaml`
-- `references/mongodb-4.4-slowlog-guidelines.md`
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\sync-local.ps1
+```
 
-## Use In Codex
+## Validation
+
+Validate the skill rules and package metadata:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\validate-skill.ps1
+```
+
+Verify that the repository can install into a fresh Codex home:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test-install.ps1
+```
+
+Check the MCP server syntax:
+
+```powershell
+npm run check
+```
+
+## Use in Codex
 
 Use it directly by name:
 
@@ -87,22 +92,36 @@ or:
 Use $hap-mongodb-slowlog-analysis to analyze this MongoDB slow log.
 ```
 
-The skill can work even if the Codex UI does not show it in "Personal skills".
+The skill can work even if the Codex UI does not list it in "Personal skills".
 
-## MCP App Route
+## Official publish route
 
-This repository also includes a minimal MCP server so the analysis can move toward the official App / MCP path.
+As of the current public OpenAI documentation, the practical official route is through the ChatGPT Skills experience, not a public global "skill website" marketplace.
+
+What that means in practice:
+
+1. Open ChatGPT and go to the Skills page for your account or workspace.
+2. Create a new skill or use the "upload from your computer" flow if that option is available in your plan/workspace.
+3. If you are on a managed workspace, publish/share it to the workspace skills library according to your admin permissions.
+
+Important notes:
+
+- Public docs describe a workspace/library style flow; I have not found a public official marketplace where an individual skill is globally listed like an app store entry.
+- Skills are supported in Codex, but they do not automatically sync across every surface.
+- So the reliable Codex install path today is still local installation into `$CODEX_HOME/skills`, which this repository already supports.
+
+## MCP / App route
+
+This repository also includes a minimal MCP server so the project can move toward the official App / MCP path:
+
+- `.mcp.json`
+- `scripts/mcp-server.js`
+- tool: `analyze_mongodb_slowlog`
 
 Install dependencies:
 
 ```powershell
 npm install
-```
-
-Check the MCP server:
-
-```powershell
-npm run check
 ```
 
 Start it manually:
@@ -111,38 +130,21 @@ Start it manually:
 npm run mcp
 ```
 
-MCP config:
-
-```text
-.mcp.json
-```
-
-Tool:
-
-```text
-analyze_mongodb_slowlog
-```
-
-Inputs:
-
-- `slowlog`: full slow-log JSON, JSONL slow-log text, or raw MongoDB query command JSON
-- `format`: `text` or `html`
-
-## Repository Layout
+## Repository layout
 
 - `.codex-plugin/plugin.json`: plugin manifest
 - `.mcp.json`: MCP server config
 - `skills/hap-mongodb-slowlog-analysis/`: skill files
 - `skills/hap-mongodb-slowlog-analysis/SKILL.md`: main skill instructions
-- `skills/hap-mongodb-slowlog-analysis/references/`: detailed analysis rules
+- `skills/hap-mongodb-slowlog-analysis/references/`: detailed rules
 - `scripts/install-local.ps1`: install to local Codex skills directory
 - `scripts/sync-local.ps1`: sync local changes after edits
+- `scripts/test-install.ps1`: install into a temporary Codex home and verify required files
+- `scripts/validate-skill.ps1`: validate that the skill/package still follows the enforced rule set
 - `scripts/mcp-server.js`: MCP tool implementation
 - `scripts/publish-github.ps1`: commit/publish helper
 
-## Publish Changes
-
-Commit and push with:
+## Publish repository changes
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\publish-github.ps1 -CommitMessage "your message" -Push
