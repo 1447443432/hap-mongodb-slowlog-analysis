@@ -137,6 +137,42 @@ When it finishes, GitHub creates a Release and attaches:
 
 That file can then be downloaded directly from the repository's **Releases** page.
 
+### Recommended release trigger
+
+The safest release flow is:
+
+1. Commit and push normal code changes to `main`
+2. Push a version tag
+3. Let `Release Skill` create the GitHub Release
+
+Helper script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\publish-release.ps1 -PushTag
+```
+
+Default behavior:
+
+- Reads `package.json`
+- Uses `v<package.json version>` as the tag
+- Uses `hap-mongodb-slowlog-analysis v<package.json version>` as the release name
+
+Example:
+
+```text
+package.json version = 1.1.0
+tag = v1.1.0
+release name = hap-mongodb-slowlog-analysis v1.1.0
+```
+
+You can still override them:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\publish-release.ps1 -Version 1.1.1 -PushTag
+```
+
+This is the recommended answer to "push 时也触发一次". Instead of releasing on every push to `main`, release only when you push a version tag, which is both explicit and automatable.
+
 ## Use in Codex
 
 Use it directly by name:
@@ -202,6 +238,7 @@ npm run mcp
 - `scripts/test-install.ps1`: install into a temporary Codex home and verify required files
 - `scripts/validate-skill.ps1`: validate that the skill/package still follows the enforced rule set
 - `scripts/package-skill.ps1`: build an upload-ready folder and zip
+- `scripts/publish-release.ps1`: create and optionally push a version tag to trigger the GitHub Release workflow
 - `scripts/mcp-server.js`: MCP tool implementation
 - `scripts/publish-github.ps1`: commit/publish helper
 
