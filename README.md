@@ -6,7 +6,8 @@ It analyzes pasted MongoDB slow logs or query command JSON, explains why a query
 
 ## Key Rules
 
-- Treat `_id` as already indexed by MongoDB. Do not recommend creating a single-field `_id` index.
+- For HAP worksheet collections whose names start with `ws`, treat `_id`, `utime`, `rowid`, and `ctime` single-field indexes as existing defaults.
+- Do not recommend recreating single-field `_id`, `utime`, `rowid`, or `ctime` indexes for `ws*` collections.
 - Treat `status` as low-cardinality and do not include it in recommended index definitions.
 - Treat `ctime` as already indexed and do not recommend a new index on it.
 - For `$ne`, `$nin`, `$not`, "not contains", "does not start with", regex contains search, and mixed empty checks, prefer query rewrite before ordinary indexes.

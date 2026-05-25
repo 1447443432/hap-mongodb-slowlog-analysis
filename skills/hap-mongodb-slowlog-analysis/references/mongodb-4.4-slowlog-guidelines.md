@@ -58,15 +58,20 @@ Only suggest a new helper/derived field when the user explicitly says the origin
 
 These constraints are mandatory for this skill:
 
-- `ctime` is already indexed.
-- Never recommend adding a new index on `ctime`.
+- HAP worksheet collections whose collection names start with `ws` have these default single-field indexes:
+  - `{ "_id": 1 }`
+  - `{ "utime": 1 }`
+  - `{ "rowid": 1 }`
+  - `{ "ctime": 1 }`
+- Never recommend recreating those single-field indexes for `ws*` collections.
+- If `_id`, `utime`, `rowid`, or `ctime` appears in a recommendation, make clear whether it is already a default single-field index or is being considered only as part of a compound index.
 - `status` has only two values: `1` and `9`.
 - `1` means active/in-use.
 - Never include `status` in a recommended index definition because it is low-cardinality and not useful enough for index design here.
 
 When either field appears in the query:
 
-- Mention `ctime` as already indexed when it matters to the explanation.
+- Mention `_id`, `utime`, `rowid`, and `ctime` as default indexed fields for `ws*` collections when it matters to the explanation.
 - Mention `status` as a business filter that should not drive index design.
 
 ## Advice Patterns
@@ -90,6 +95,7 @@ When either field appears in the query:
 - Avoid recommending a sort-supporting index if the visible filter is too weak or dominated by excluded fields.
 - Treat `_id` as already indexed by default.
 - Never recommend creating a single-field `_id` index.
+- For `ws*` collections, also never recommend creating single-field `utime`, `rowid`, or `ctime` indexes.
 - When `sort: { _id: 1/-1 }` appears with business filters, explain that `_id` may only be serving sort order.
 - Only include `_id` as the trailing key of a compound index when planner evidence shows `_id` sort order is still a bottleneck after query predicates are index-friendly.
 - For incomplete command payloads without `planSummary`, do not include `_id` in post-rewrite candidate indexes by default; mention it as something to re-evaluate after `explain("executionStats")`.

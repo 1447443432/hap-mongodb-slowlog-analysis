@@ -178,6 +178,19 @@ function namespaceParts(ns) {
   };
 }
 
+function isWorksheetCollection(ns) {
+  return namespaceParts(ns).collection.startsWith("ws");
+}
+
+function defaultIndexedFields(ns) {
+  return isWorksheetCollection(ns) ? new Set(["_id", "utime", "rowid", "ctime"]) : new Set(["_id"]);
+}
+
+function isDefaultSingleFieldIndex(ns, spec) {
+  const entries = Object.entries(spec);
+  return entries.length === 1 && defaultIndexedFields(ns).has(entries[0][0]);
+}
+
 function buildIndexCommand(ns, spec) {
   const { db, collection } = namespaceParts(ns);
   return (
@@ -267,11 +280,18 @@ function summarizeEvent(event) {
 
   const strongEqualityFields = signals.equalityFields.filter(
     (field) =>
+      !defaultIndexedFields(ns).has(field) &&
       !signals.emptyCheckFields.includes(field) &&
       !(signals.operatorFields.get(field) || []).some((op) =>
         ["$size", "$ne", "$nin", "$not", "$regex"].includes(op)
       )
   );
+
+  if (isWorksheetCollection(ns)) {
+    findings.push(
+      "该集合是 ws* 工作表集合，默认已有 _id、utime、rowid、ctime 单字段索引；不要重复建议这些单字段索引。"
+    );
+  }
 
   if (signals.hasEmptyChecks || signals.hasNe || signals.hasNin || signals.hasNot || signals.hasRegex) {
     indexAdvice.push("当前不建议直接执行 createIndex，请先把不走索引或索引收益差的条件改成精确等值查询。");
@@ -295,11 +315,15 @@ function summarizeEvent(event) {
     } else if (signals.rangeFields.length) {
       spec[signals.rangeFields[0]] = 1;
     }
-    indexAdvice.push(`可以直接测试复合索引：${pretty(spec)}。`);
-    if (sortField === "_id") {
-      indexAdvice.push("这里的 _id 是复合索引里的尾部排序键，不是建议创建单字段 _id 索引；_id 单字段索引 MongoDB 已默认存在。");
+    if (isDefaultSingleFieldIndex(ns, spec)) {
+      indexAdvice.push("不建议创建该单字段索引，因为它属于当前集合的默认索引。请补完整 slowlog 或 explain 后再判断是否需要业务字段复合索引。");
+    } else {
+      indexAdvice.push(`可以直接测试复合索引：${pretty(spec)}。`);
+      if (defaultIndexedFields(ns).has(sortField)) {
+        indexAdvice.push(`这里的 ${sortField} 是复合索引里的排序键，不是建议创建单字段 ${sortField} 索引；该单字段索引已默认存在。`);
+      }
+      indexCommands.push(buildIndexCommand(ns, spec));
     }
-    indexCommands.push(buildIndexCommand(ns, spec));
   } else {
     indexAdvice.push("当前可索引信号不足，建议先补完整 slowlog 或 explain，再决定索引。");
   }

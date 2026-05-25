@@ -1,6 +1,6 @@
 ﻿---
 name: hap-mongodb-slowlog-analysis
-description: Analyze MongoDB 4.4.x slow logs from pasted slow-log text, uploaded log files, or mongodb.log content and produce practical query optimization advice, index recommendations, evidence-backed reasoning, and ready-to-run Mongo shell index commands. The skill is AI-first and should analyze logs directly in conversation without relying on local PowerShell by default. It should also be able to group repeated entries by namespace, deduplicate repeated query shapes, and summarize repeated patterns before giving advice. Only treat DOCX or PDF export as optional conversion steps that may require local tooling. Prefer Chinese output by default, but support English when requested. Treat ctime as already indexed and never recommend a new index on it. Treat status as a low-cardinality field with only 1 and 9, where 1 means active/in-use, and do not include status in recommended index definitions.
+description: Analyze MongoDB 4.4.x slow logs from pasted slow-log text, uploaded log files, or mongodb.log content and produce practical query optimization advice, index recommendations, evidence-backed reasoning, and ready-to-run Mongo shell index commands. The skill is AI-first and should analyze logs directly in conversation without relying on local PowerShell by default. It should also be able to group repeated entries by namespace, deduplicate repeated query shapes, and summarize repeated patterns before giving advice. Only treat DOCX or PDF export as optional conversion steps that may require local tooling. Prefer Chinese output by default, but support English when requested. For HAP worksheet collections whose names start with ws, treat _id, utime, rowid, and ctime single-field indexes as existing defaults and never recommend recreating those single-field indexes. Treat status as a low-cardinality field with only 1 and 9, where 1 means active/in-use, and do not include status in recommended index definitions.
 ---
 
 # MongoDB Slowlog Analysis
@@ -277,6 +277,8 @@ description: Analyze MongoDB 4.4.x slow logs from pasted slow-log text, uploaded
 - 范围字段一般放在复合索引后部，除非证据明确支持别的顺序。
 - 如果查询有 `$or` 且不同分支走不同字段，优先考虑“每个分支一套可命中的索引”。
 - `_id` 字段默认已有索引。看到 `planSummary: IXSCAN { _id: 1 }` 或 `IXSCAN { _id: -1 }` 时，不要说“缺少 `_id` 索引”。
+- 对 HAP 工作表集合（集合名以 `ws` 开头），默认认为单字段索引 `{ "_id": 1 }`、`{ "utime": 1 }`、`{ "rowid": 1 }`、`{ "ctime": 1 }` 已存在。
+- 不要为 `ws*` 集合建议重复创建单字段 `_id`、`utime`、`rowid`、`ctime` 索引；如果需要使用这些字段，只能作为复合索引中的排序键或辅助键来解释。
 - 如果查询同时有业务字段过滤和 `sort: { _id: 1/-1 }`，且日志显示 `IXSCAN { _id: ... }`、`docsExamined` 很高、`nreturned` 很低，应说明：当前 `_id` 默认索引主要在服务排序，不能同时高效完成业务字段过滤。
 - 这类场景不要建议创建单字段 `{ "_id": 1 }` 索引，也不要把建议表述成“给 `_id` 建索引”。
 - 只有当查询已改写成正向等值/范围条件，且完整 slowlog 或 explain 显示排序仍由 `_id` 路径导致大量扫描时，才建议把 `_id` 作为复合索引的尾部排序键，例如 `{ "业务过滤字段": 1, "_id": 1 }`。
@@ -290,11 +292,14 @@ description: Analyze MongoDB 4.4.x slow logs from pasted slow-log text, uploaded
 - 默认值必须保持字段类型一致。不要让同一字段同时混用 `null`、`""`、`[]`、字符串默认值和数组值；如果历史数据已混用，应建议先做一次数据归一化，再建索引和改查询。
 - 当原查询是 `{ "$or": [ { field: null }, { field: "" }, { field: { "$size": 0 } } ] }` 时，优先建议改为写入统一默认值后查询 `{ field: 默认值 }`，再基于该等值条件设计索引。
 - 明确排除以下字段：
+  - `_id` 单字段索引
   - `ctime`
+  - `utime` 单字段索引
+  - `rowid` 单字段索引
   - `status`
 - 不要为低基数字段单独建议索引。
 - 如果查询里出现 `status`，可以解释它是业务过滤条件，但不要把它纳入推荐索引定义。
-- 如果查询里出现 `ctime`，要说明它已存在索引，不需要重复建议。
+- 如果查询里出现 `_id`、`utime`、`rowid`、`ctime`，要说明 `ws*` 集合默认已有这些单字段索引，不需要重复建议。
 - 生成索引命令时：
   - 不要给索引名
   - 默认使用后台创建参数 `background: true`
