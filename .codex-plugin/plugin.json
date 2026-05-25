@@ -1,7 +1,7 @@
 {
   "name": "hap-mongodb-slowlog-analysis",
-  "version": "1.0.0",
-  "description": "Analyze MongoDB 4.4 slow logs and provide practical optimization guidance.",
+  "version": "1.1.0",
+  "description": "Analyze MongoDB 4.4 slow logs and provide practical optimization guidance, including default-value rewrites for non-index-friendly predicates.",
   "author": {
     "name": "Local Codex User"
   },
@@ -17,7 +17,7 @@
   "interface": {
     "displayName": "HAP MongoDB Slowlog Analysis",
     "shortDescription": "Analyze MongoDB slow logs and suggest practical fixes",
-    "longDescription": "Analyze pasted or uploaded MongoDB slow logs, group repeated query shapes, explain why they are slow, and provide practical query and index optimization advice.",
+    "longDescription": "Analyze pasted or uploaded MongoDB slow logs, group repeated query shapes, explain why they are slow, and provide practical query rewrites and index optimization advice. It prefers default-value exact-match rewrites for null, empty string, empty array, negative predicates, and other non-index-friendly conditions.",
     "developerName": "Local",
     "category": "Coding",
     "capabilities": [
@@ -27,7 +27,8 @@
     "defaultPrompt": [
       "Analyze this MongoDB slow log and explain why it is slow.",
       "Group repeated slow queries and suggest indexes.",
-      "Generate practical optimization advice for this MongoDB log."
+      "Generate practical optimization advice for this MongoDB log.",
+      "Rewrite non-index-friendly empty checks into default-value exact-match queries."
     ],
     "brandColor": "#0F766E",
     "composerIcon": "./assets/hap-mongodb-slowlog-analysis-small.svg",

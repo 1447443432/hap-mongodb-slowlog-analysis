@@ -3,4 +3,4 @@ interface:
   short_description: "Analyze MongoDB slow logs and suggest practical fixes"
   icon_small: "./assets/hap-mongodb-slowlog-analysis-small.svg"
   icon_large: "./assets/app-icon.svg"
-  default_prompt: "Use HAP MongoDB Slowlog Analysis to analyze pasted or uploaded MongoDB slow logs, explain why they are slow, group repeated query shapes, and provide practical index and query optimization guidance."
+  default_prompt: "Use HAP MongoDB Slowlog Analysis to analyze pasted or uploaded MongoDB slow logs, explain why they are slow, group repeated query shapes, and provide practical query rewrite and index guidance. Prefer default-value exact-match rewrites for null, empty string, empty array, and negative predicates before recommending ordinary indexes."

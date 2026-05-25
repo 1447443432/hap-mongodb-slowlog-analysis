@@ -1,8 +1,8 @@
 {
   "name": "hap-mongodb-slowlog-analysis-plugin",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Local MCP plugin for MongoDB slowlog analysis.",
+  "description": "Local MCP plugin for MongoDB slowlog analysis with default-value rewrite guidance.",
   "type": "module",
   "scripts": {
     "mcp": "node ./scripts/mcp-server.js",

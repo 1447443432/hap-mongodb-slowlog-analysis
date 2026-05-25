@@ -35,6 +35,25 @@ Prefer this ordering unless evidence suggests otherwise:
 
 Do not blindly include every filter field. Exclude low-value fields and fields the project has declared out of scope.
 
+## Non-Index-Friendly Predicates
+
+Strictly follow the project slow-query rules for predicates that do not use ordinary indexes well:
+
+- Negative predicates such as `$ne`, `$nin`, `$not`, "not contains", and "does not start with" should not drive normal index recommendations.
+- Mixed empty checks such as `null`, `""`, missing field, and `$size: 0` should not be treated as a strong indexable equality shape.
+- Plain contains regex and case-insensitive regex usually have poor ordinary B-tree index benefit.
+- Nested `$or` branches with empty checks often need query rewrite before index design.
+
+Preferred rewrite:
+
+- Keep the original field key.
+- Normalize writes so empty or missing business values are stored as one canonical default value.
+- Query that default value with exact equality, for example `{ "field": "__EMPTY__" }` or another business-approved enum/default.
+- Keep the field type consistent; do not mix `null`, `""`, `[]`, scalar defaults, and array values for the same logical predicate.
+- Normalize historical data before relying on the rewritten query shape.
+
+Only suggest a new helper/derived field when the user explicitly says the original field value cannot be normalized but adding fields is allowed.
+
 ## Project-Specific Constraints
 
 These constraints are mandatory for this skill:
