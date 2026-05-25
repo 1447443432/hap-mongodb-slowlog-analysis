@@ -5,10 +5,10 @@ on:
     inputs:
       tag_name:
         description: "Release tag, for example v1.1.1"
-        required: true
+        required: false
       release_name:
         description: "Release title"
-        required: true
+        required: false
   push:
     tags:
       - "v*"
@@ -47,17 +47,35 @@ jobs:
         shell: pwsh
         run: .\scripts\package-skill.ps1
 
+      - name: Read package version
+        id: package
+        shell: pwsh
+        run: |
+          $pkg = Get-Content -LiteralPath .\package.json -Raw | ConvertFrom-Json
+          $version = $pkg.version
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "default_tag=v$version" >> $env:GITHUB_OUTPUT
+          "default_release_name=hap-mongodb-slowlog-analysis v$version" >> $env:GITHUB_OUTPUT
+
       - name: Resolve release metadata
         id: meta
         shell: pwsh
         run: |
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            "tag_name=${{ github.event.inputs.tag_name }}" >> $env:GITHUB_OUTPUT
-            "release_name=${{ github.event.inputs.release_name }}" >> $env:GITHUB_OUTPUT
+            $tag = "${{ github.event.inputs.tag_name }}"
+            $name = "${{ github.event.inputs.release_name }}"
+            if ([string]::IsNullOrWhiteSpace($tag)) {
+              $tag = "${{ steps.package.outputs.default_tag }}"
+            }
+            if ([string]::IsNullOrWhiteSpace($name)) {
+              $name = "${{ steps.package.outputs.default_release_name }}"
+            }
+            "tag_name=$tag" >> $env:GITHUB_OUTPUT
+            "release_name=$name" >> $env:GITHUB_OUTPUT
           } else {
             $tag = "${{ github.ref_name }}"
             "tag_name=$tag" >> $env:GITHUB_OUTPUT
-            "release_name=$tag" >> $env:GITHUB_OUTPUT
+            "release_name=hap-mongodb-slowlog-analysis $tag" >> $env:GITHUB_OUTPUT
           }
 
       - name: Create GitHub release

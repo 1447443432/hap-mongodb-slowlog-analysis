@@ -107,6 +107,8 @@ Workflow:
 
 After you push to `main` or manually run the workflow, download the packaged zip or upload-ready folder from the workflow run's **Artifacts** section.
 
+This workflow does **not** create a GitHub Release. It only uploads build artifacts into that single workflow run.
+
 ### 2. Releases page
 
 Workflow:
@@ -120,9 +122,14 @@ This is the path for the "click from repository homepage and download zip" exper
 You can use it in either mode:
 
 1. Push a tag like `v1.1.1`
-2. Or manually run the workflow in GitHub Actions and provide:
-   - `tag_name`
-   - `release_name`
+2. Or manually run the workflow in GitHub Actions
+
+Default version behavior:
+
+- If you manually run the workflow and leave the inputs empty, it reads `package.json` and uses:
+  - tag: `v<package.json version>`
+  - release name: `hap-mongodb-slowlog-analysis v<package.json version>`
+- If you provide `tag_name` or `release_name`, those values override the defaults.
 
 When it finishes, GitHub creates a Release and attaches:
 
